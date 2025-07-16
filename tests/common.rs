@@ -1,0 +1,158 @@
+use anyhow::Result;
+use serde_json::json;
+use std::{
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+use tokio::{
+    net::TcpListener,
+    process::{Child, Command},
+    time::sleep,
+};
+use wiremock::{
+    matchers::{header, method, path},
+    Mock, MockServer, ResponseTemplate,
+};
+use lettre::transport::smtp::{
+    authentication::Credentials,
+    SmtpTransport,
+    client::Tls,
+};
+
+/// Mock MailPace API server for testing
+pub struct MockMailPaceServer {
+    pub server: MockServer,
+    pub received_requests: Arc<Mutex<Vec<serde_json::Value>>>,
+}
+
+impl MockMailPaceServer {
+    pub async fn new() -> Self {
+        let server = MockServer::start().await;
+        let received_requests = Arc::new(Mutex::new(Vec::new()));
+        
+        Self {
+            server,
+            received_requests,
+        }
+    }
+
+    pub async fn setup_success_response(&self) -> &Self {
+        Mock::given(method("POST"))
+            .and(path("/api/v1/send"))
+            .and(header("Content-Type", "application/json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "test-message-id",
+                "status": "sent"
+            })))
+            .mount(&self.server)
+            .await;
+        
+        self
+    }
+
+    pub async fn setup_error_response(&self, status: u16, message: &str) -> &Self {
+        Mock::given(method("POST"))
+            .and(path("/api/v1/send"))
+            .respond_with(ResponseTemplate::new(status).set_body_json(json!({
+                "errors": [message]
+            })))
+            .mount(&self.server)
+            .await;
+        
+        self
+    }
+
+    pub async fn setup_capture_requests(&self) -> &Self {
+        Mock::given(method("POST"))
+            .and(path("/api/v1/send"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "test-message-id",
+                "status": "sent"
+            })))
+            .mount(&self.server)
+            .await;
+        
+        self
+    }
+
+    pub fn get_captured_requests(&self) -> Vec<serde_json::Value> {
+        self.received_requests.lock().unwrap().clone()
+    }
+}
+
+/// Test server manager
+pub struct TestServer {
+    pub child: Child,
+    pub smtp_port: u16,
+    pub mock_server: MockMailPaceServer,
+}
+
+impl TestServer {
+    pub async fn new() -> Result<Self> {
+        let mock_server = MockMailPaceServer::new().await;
+        
+        // Find available port for SMTP
+        let smtp_listener = TcpListener::bind("127.0.0.1:0").await?;
+        let smtp_port = smtp_listener.local_addr()?.port();
+        drop(smtp_listener);
+        
+        // Start the vibe-gateway server
+        let child = Command::new("cargo")
+            .args([
+                "run",
+                "--",
+                "--listen",
+                &format!("127.0.0.1:{}", smtp_port),
+                "--mailpace-endpoint",
+                &format!("{}/api/v1/send", mock_server.server.uri()),
+                "--debug",
+            ])
+            .env("MAILPACE_API_TOKEN", "test-token")
+            .spawn()?;
+        
+        let server = Self {
+            child,
+            smtp_port,
+            mock_server,
+        };
+        
+        // Wait for server to start
+        server.wait_for_server().await?;
+        
+        Ok(server)
+    }
+
+    async fn wait_for_server(&self) -> Result<()> {
+        for _ in 0..30 {
+            if let Ok(_) = tokio::net::TcpStream::connect(format!("127.0.0.1:{}", self.smtp_port)).await {
+                return Ok(());
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+        Err(anyhow::anyhow!("Server failed to start"))
+    }
+
+    pub fn smtp_address(&self) -> SocketAddr {
+        format!("127.0.0.1:{}", self.smtp_port).parse().unwrap()
+    }
+}
+
+impl Drop for TestServer {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+    }
+}
+
+/// Helper function to create SMTP transport
+pub fn create_smtp_transport(server_addr: SocketAddr, credentials: Option<Credentials>) -> SmtpTransport {
+    let mut builder = SmtpTransport::builder_dangerous(server_addr.ip().to_string())
+        .port(server_addr.port())
+        .tls(Tls::None);
+    
+    if let Some(creds) = credentials {
+        builder = builder.credentials(creds);
+    }
+    
+    builder.build()
+}

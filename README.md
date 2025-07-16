@@ -184,3 +184,59 @@ cargo run -- --debug
 ## License
 
 This project is licensed under the MIT License.
+
+## Testing
+
+This project includes a comprehensive test suite to ensure reliability and performance:
+
+### Test Suite Overview
+- **Integration Tests**: End-to-end testing of SMTP functionality with mock MailPace API
+- **Unit Tests**: Testing individual components in isolation
+- **Performance Tests**: Load testing and throughput measurement
+- **CI/CD Pipeline**: Automated testing on every commit
+
+### Running Tests
+
+#### Quick Start
+```bash
+# Run all tests
+./test.sh
+
+# Run specific test suites
+./test.sh integration    # Integration tests only
+./test.sh unit          # Unit tests only
+./test.sh performance   # Performance tests only
+./test.sh coverage      # Tests with coverage report
+```
+
+#### Manual Test Commands
+```bash
+# All tests
+cargo test
+
+# Integration tests with mock MailPace API
+cargo test --test integration_tests
+
+# Unit tests for individual components
+cargo test --test mailpace_tests
+
+# Performance and load tests
+cargo test --test performance_tests --release
+```
+
+### Test Coverage
+- **SMTP Protocol**: Command handling, authentication, data transfer
+- **MailPace Integration**: API calls, error handling, payload formatting
+- **Email Processing**: Attachments, HTML/text content, headers
+- **Performance**: Concurrent connections, throughput, resource usage
+- **Security**: Authentication, input validation, error handling
+
+### Continuous Integration
+The project uses GitHub Actions for automated testing:
+- ✅ Code formatting and linting
+- ✅ Unit and integration tests
+- ✅ Performance benchmarks
+- ✅ Security audits
+- ✅ Docker build verification
+
+For detailed testing documentation, see [TESTING.md](TESTING.md).

@@ -3,6 +3,10 @@ name = "vibe-gateway"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "vibe_gateway"
+path = "src/lib.rs"
+
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
 tokio-rustls = "0.24"
@@ -16,3 +20,10 @@ anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 clap = { version = "4.0", features = ["derive", "env"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
+wiremock = "0.5"
+lettre = "0.11"
+uuid = { version = "1.0", features = ["v4"] }
+futures = "0.3"
