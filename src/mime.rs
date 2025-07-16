@@ -185,8 +185,7 @@ impl MimeParser {
     fn extract_boundary(&self, content_type: &str) -> Result<String> {
         for part in content_type.split(';') {
             let part = part.trim();
-            if part.starts_with("boundary=") {
-                let boundary = &part[9..];
+            if let Some(boundary) = part.strip_prefix("boundary=") {
                 return Ok(boundary.trim_matches('"').to_string());
             }
         }
