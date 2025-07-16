@@ -1,9 +1,9 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
 use std::collections::HashMap;
 use tracing::{debug, warn};
 
-use crate::mailpace::{Attachment, MailPacePayload};
+use crate::mailpace::Attachment;
 
 #[derive(Debug, Clone)]
 pub struct MimeHeader {

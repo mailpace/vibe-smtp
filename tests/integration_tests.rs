@@ -194,7 +194,7 @@ async fn test_smtp_commands_ehlo() -> Result<()> {
     let stream = tokio::net::TcpStream::connect(server.smtp_address()).await?;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     
-    let (mut reader, mut writer) = stream.into_split();
+    let (reader, mut writer) = stream.into_split();
     let mut buf_reader = BufReader::new(reader);
     let mut response = String::new();
     
