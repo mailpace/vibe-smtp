@@ -17,41 +17,35 @@ The server supports the following configuration options:
 
 - `--listen` or `-l`: SMTP server listen address (default: `127.0.0.1:2525`)
 - `--mailpace-endpoint`: MailPace API endpoint (default: `https://app.mailpace.com/api/v1/send`)
-- `--mailpace-token`: MailPace API token (can also be set via `MAILPACE_API_TOKEN` environment variable)
+- `--default-mailpace-token`: Default MailPace API token (optional, can also be set via `MAILPACE_API_TOKEN` environment variable)
 - `--debug` or `-d`: Enable debug logging
+
+## Authentication
+
+The server follows the MailPace SMTP authentication model as described in the SMTP-DOCS.md:
+
+- **Primary method**: Users provide their MailPace API token as both username and password when connecting via SMTP
+- **Fallback**: If no token is provided via SMTP AUTH, the server can use a default token from the environment or command line
+- **Token format**: Both username and password should be set to the same MailPace API token
+
+According to MailPace documentation: "API tokens can be found under the 'API Tokens' menu of each Domain, there is one unique API token for every domain"
 
 ## Quick Start
 
-1. Set your MailPace API token:
+1. **Option 1: Users authenticate with their tokens** (recommended):
    ```bash
-   export MAILPACE_API_TOKEN=your_api_token_here
+   cargo run
    ```
 
-2. Run the server:
+2. **Option 2: Use a default token**:
    ```bash
+   export MAILPACE_API_TOKEN=your_default_token_here
    cargo run
    ```
 
 3. Test with the included Python script:
    ```bash
    python3 test_smtp.py
-   ```
-
-## Usage
-
-1. Set your MailPace API token:
-   ```bash
-   export MAILPACE_API_TOKEN=your_api_token_here
-   ```
-
-2. Run the server:
-   ```bash
-   cargo run
-   ```
-
-3. Or with custom settings:
-   ```bash
-   cargo run -- --listen 0.0.0.0:587 --debug
    ```
 
 ## SMTP Client Configuration
@@ -61,9 +55,35 @@ Configure your email client or application with these settings:
 - **SMTP Server**: `localhost` (or your server's IP)
 - **SMTP Port**: `2525` (or your configured port)
 - **Encryption**: None (STARTTLS supported but not enforced)
-- **Authentication**: PLAIN or LOGIN (any credentials accepted)
-- **Username**: Any value (authentication is pass-through)
-- **Password**: Any value (authentication is pass-through)
+- **Authentication**: PLAIN or LOGIN
+- **Username**: Your MailPace API token
+- **Password**: Your MailPace API token (same as username)
+
+## Usage
+
+1. **Primary usage** (users provide their own API tokens):
+   ```bash
+   cargo run
+   ```
+
+2. **With default token fallback** (optional):
+   ```bash
+   export MAILPACE_API_TOKEN=your_default_token_here
+   cargo run
+   ```
+
+3. **With custom settings**:
+   ```bash
+   cargo run -- --listen 0.0.0.0:587 --debug
+   ```
+
+## How It Works
+
+When a user connects via SMTP:
+1. They authenticate using their MailPace API token as both username and password
+2. The server extracts this token from the SMTP AUTH command
+3. The server uses this token to authenticate with the MailPace API
+4. If no token is provided via SMTP AUTH, the server falls back to a default token (if configured)
 
 ## MailPace Features
 

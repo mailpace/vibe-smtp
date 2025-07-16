@@ -21,6 +21,9 @@ def send_test_email():
     sender = "test@yourdomain.com"
     recipient = "recipient@example.com"
     
+    # MailPace API token (you should set this)
+    api_token = os.environ.get("MAILPACE_API_TOKEN", "your_api_token_here")
+    
     # Create message
     msg = MIMEMultipart()
     msg['From'] = sender
@@ -42,6 +45,7 @@ def send_test_email():
         <li>HTML email content</li>
         <li>MailPace tags</li>
         <li>List-Unsubscribe header</li>
+        <li>Authentication with MailPace API token</li>
     </ul>
     </body>
     </html>
@@ -56,6 +60,7 @@ def send_test_email():
     - Text email content
     - MailPace tags
     - List-Unsubscribe header
+    - Authentication with MailPace API token
     """
     
     msg.attach(MIMEText(text_body, 'plain'))
@@ -78,8 +83,8 @@ def send_test_email():
         server = smtplib.SMTP(smtp_host, smtp_port)
         server.set_debuglevel(1)  # Enable debug output
         
-        # Simple authentication (any credentials work)
-        server.login("user", "pass")
+        # Authenticate with MailPace API token as both username and password
+        server.login(api_token, api_token)
         
         # Send email
         server.send_message(msg)
@@ -96,7 +101,7 @@ def send_test_email():
 if __name__ == "__main__":
     print("Testing Vibe Gateway SMTP Server...")
     print("Make sure the server is running with: cargo run")
-    print("And that you have set MAILPACE_API_TOKEN environment variable")
+    print("Set your MailPace API token: export MAILPACE_API_TOKEN=your_token_here")
     print()
     
     if send_test_email():

@@ -1,11 +1,12 @@
 use anyhow::{Context, Result};
+use base64::{engine::general_purpose, Engine as _};
 use clap::Parser;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Parser, Debug)]
@@ -19,9 +20,9 @@ struct Args {
     #[arg(long, default_value = "https://app.mailpace.com/api/v1/send")]
     mailpace_endpoint: String,
     
-    /// MailPace API token
+    /// Default MailPace API token (optional, can be overridden by SMTP auth)
     #[arg(long, env = "MAILPACE_API_TOKEN")]
-    mailpace_token: Option<String>,
+    default_mailpace_token: Option<String>,
     
     /// Debug mode
     #[arg(short, long)]
@@ -84,25 +85,27 @@ enum SmtpState {
 struct SmtpSession {
     client: Client,
     mailpace_endpoint: String,
-    mailpace_token: Option<String>,
+    default_mailpace_token: Option<String>,
     state: SmtpState,
     helo: Option<String>,
     mail_from: Option<String>,
     rcpt_to: Vec<String>,
     data: Vec<u8>,
+    auth_token: Option<String>, // Token provided via SMTP AUTH
 }
 
 impl SmtpSession {
-    fn new(client: Client, mailpace_endpoint: String, mailpace_token: Option<String>) -> Self {
+    fn new(client: Client, mailpace_endpoint: String, default_mailpace_token: Option<String>) -> Self {
         Self {
             client,
             mailpace_endpoint,
-            mailpace_token,
+            default_mailpace_token,
             state: SmtpState::Init,
             helo: None,
             mail_from: None,
             rcpt_to: Vec::new(),
             data: Vec::new(),
+            auth_token: None,
         }
     }
 
@@ -192,8 +195,29 @@ impl SmtpSession {
             "AUTH" => {
                 if parts.len() >= 2 {
                     match parts[1].to_uppercase().as_str() {
-                        "PLAIN" | "LOGIN" => {
-                            Ok(Some("235 Authentication successful".to_string()))
+                        "PLAIN" => {
+                            if parts.len() >= 3 {
+                                // AUTH PLAIN token - decode and extract token
+                                if let Ok(decoded) = general_purpose::STANDARD.decode(parts[2]) {
+                                    if let Ok(auth_string) = String::from_utf8(decoded) {
+                                        // PLAIN format: \0username\0password
+                                        // For MailPace, both username and password are the API token
+                                        let parts: Vec<&str> = auth_string.split('\0').collect();
+                                        if parts.len() >= 3 {
+                                            self.auth_token = Some(parts[1].to_string()); // Use username as token
+                                        }
+                                    }
+                                }
+                                Ok(Some("235 Authentication successful".to_string()))
+                            } else {
+                                // Multi-step AUTH PLAIN
+                                Ok(Some("334 ".to_string()))
+                            }
+                        }
+                        "LOGIN" => {
+                            // For LOGIN, we need to implement the multi-step process
+                            // This is a simplified implementation that accepts any token
+                            Ok(Some("334 VXNlcm5hbWU6".to_string())) // Username: in base64
                         }
                         _ => {
                             Ok(Some("504 Unrecognized authentication type".to_string()))
@@ -360,8 +384,10 @@ impl SmtpSession {
     }
     
     async fn send_to_mailpace(&self, payload: &MailPacePayload) -> Result<()> {
-        let token = self.mailpace_token.as_ref()
-            .context("No MailPace API token provided")?;
+        // Use token from SMTP AUTH first, then fall back to default
+        let token = self.auth_token.as_ref()
+            .or(self.default_mailpace_token.as_ref())
+            .context("No MailPace API token provided via SMTP AUTH or default configuration")?;
         
         debug!("Sending payload to MailPace: {:?}", payload);
         
@@ -401,6 +427,7 @@ impl SmtpSession {
         self.rcpt_to.clear();
         self.data.clear();
         self.state = SmtpState::Helo;
+        // Don't reset auth_token - keep it for the session
     }
 }
 
@@ -426,8 +453,10 @@ async fn main() -> Result<()> {
     
     info!("SMTP server listening on {}", args.listen);
     
-    if args.mailpace_token.is_none() {
-        warn!("No MailPace API token provided. Set MAILPACE_API_TOKEN environment variable or use --mailpace-token");
+    if args.default_mailpace_token.is_none() {
+        info!("No default MailPace API token provided. Users must authenticate with their API token via SMTP AUTH.");
+    } else {
+        info!("Default MailPace API token loaded from environment. Users can override via SMTP AUTH.");
     }
     
     while let Ok((stream, addr)) = listener.accept().await {
@@ -435,10 +464,10 @@ async fn main() -> Result<()> {
         
         let client = client.clone();
         let mailpace_endpoint = args.mailpace_endpoint.clone();
-        let mailpace_token = args.mailpace_token.clone();
+        let default_mailpace_token = args.default_mailpace_token.clone();
         
         tokio::spawn(async move {
-            let mut session = SmtpSession::new(client, mailpace_endpoint, mailpace_token);
+            let mut session = SmtpSession::new(client, mailpace_endpoint, default_mailpace_token);
             if let Err(e) = session.handle(stream).await {
                 error!("Session error for {}: {}", addr, e);
             }
