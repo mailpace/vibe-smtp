@@ -56,6 +56,12 @@ pub struct MimePart {
     pub body: Vec<u8>,
 }
 
+impl Default for MimePart {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MimePart {
     pub fn new() -> Self {
         Self {
