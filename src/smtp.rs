@@ -8,6 +8,7 @@ use tracing::{debug, error, info};
 
 use crate::connection::Connection;
 use crate::mailpace::{MailPaceClient, MailPacePayload};
+use crate::mime::MimeParser;
 
 #[derive(Debug, PartialEq)]
 pub enum SmtpState {
@@ -31,6 +32,9 @@ pub struct SmtpSession {
     auth_token: Option<String>,
     tls_acceptor: Option<TlsAcceptor>,
     supports_starttls: bool,
+    enable_attachments: bool,
+    max_attachment_size: usize,
+    max_attachments: usize,
 }
 
 impl SmtpSession {
@@ -38,6 +42,9 @@ impl SmtpSession {
         mailpace_client: MailPaceClient,
         default_mailpace_token: Option<String>,
         tls_acceptor: Option<TlsAcceptor>,
+        enable_attachments: bool,
+        max_attachment_size: usize,
+        max_attachments: usize,
     ) -> Self {
         let supports_starttls = tls_acceptor.is_some();
         Self {
@@ -51,6 +58,9 @@ impl SmtpSession {
             auth_token: None,
             tls_acceptor,
             supports_starttls,
+            enable_attachments,
+            max_attachment_size,
+            max_attachments,
         }
     }
 
@@ -182,6 +192,11 @@ impl SmtpSession {
                         
                         if self.supports_starttls {
                             response.push("250-STARTTLS".to_string());
+                        }
+                        
+                        if self.enable_attachments {
+                            response.push("250-ENHANCEDSTATUSCODES".to_string());
+                            response.push(format!("250-SIZE {}", self.max_attachment_size * self.max_attachments));
                         }
                         
                         response.push("250 8BITMIME".to_string());
@@ -322,26 +337,34 @@ impl SmtpSession {
     }
     
     fn parse_email_to_mailpace_payload(&self, email_content: &str) -> Result<MailPacePayload> {
-        let mut headers = HashMap::new();
-        let mut body_lines = Vec::new();
-        let mut in_headers = true;
-        
-        for line in email_content.lines() {
-            if in_headers {
-                if line.is_empty() {
-                    in_headers = false;
-                    continue;
+        let (headers, body, attachments) = if self.enable_attachments {
+            let mime_parser = MimeParser::new(self.max_attachment_size, self.max_attachments);
+            mime_parser.parse_email(email_content)?
+        } else {
+            // Simple parsing without attachment support
+            let mut headers = HashMap::new();
+            let mut body_lines = Vec::new();
+            let mut in_headers = true;
+            
+            for line in email_content.lines() {
+                if in_headers {
+                    if line.is_empty() {
+                        in_headers = false;
+                        continue;
+                    }
+                    
+                    if let Some(colon_pos) = line.find(':') {
+                        let key = line[..colon_pos].trim().to_lowercase();
+                        let value = line[colon_pos + 1..].trim().to_string();
+                        headers.insert(key, value);
+                    }
+                } else {
+                    body_lines.push(line);
                 }
-                
-                if let Some(colon_pos) = line.find(':') {
-                    let key = line[..colon_pos].trim().to_lowercase();
-                    let value = line[colon_pos + 1..].trim().to_string();
-                    headers.insert(key, value);
-                }
-            } else {
-                body_lines.push(line);
             }
-        }
+            
+            (headers, body_lines.join("\n"), Vec::new())
+        };
         
         let from = self.mail_from.as_ref()
             .context("No sender address")?
@@ -364,13 +387,17 @@ impl SmtpSession {
                     .collect::<Vec<_>>()
             });
         
-        let body = body_lines.join("\n");
-        
         // Simple HTML detection
         let (htmlbody, textbody) = if body.contains("<html>") || body.contains("<HTML>") {
             (Some(body), None)
         } else {
             (None, Some(body))
+        };
+        
+        let attachments = if attachments.is_empty() {
+            None
+        } else {
+            Some(attachments)
         };
         
         Ok(MailPacePayload {
@@ -383,7 +410,7 @@ impl SmtpSession {
             textbody,
             replyto,
             list_unsubscribe,
-            attachments: None, // Simplified - no attachment support for now
+            attachments,
             tags,
         })
     }

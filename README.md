@@ -104,6 +104,52 @@ X-List-Unsubscribe: <http://example.com/unsubscribe>, <mailto:unsubscribe@exampl
 ### Attachments
 Standard MIME attachments are automatically converted to MailPace format with base64 encoding.
 
+## Attachment Support
+
+The server supports email attachments when enabled with the `--enable-attachments` flag:
+
+```bash
+cargo run -- --enable-attachments
+```
+
+### Attachment Configuration
+
+- `--enable-attachments`: Enable attachment parsing and forwarding
+- `--max-attachment-size`: Maximum size per attachment in bytes (default: 10MB)
+- `--max-attachments`: Maximum number of attachments per email (default: 10)
+
+### Attachment Handling
+
+When attachment support is enabled, the server:
+- Parses MIME multipart messages
+- Extracts attachments with their filenames and content types
+- Converts attachments to base64 format for MailPace API
+- Validates attachment sizes and counts against configured limits
+- Logs attachment processing for debugging
+
+### Example Usage
+
+```bash
+# Enable attachments with custom limits
+cargo run -- --enable-attachments --max-attachment-size 5242880 --max-attachments 5
+
+# Test with the attachment test script
+python3 test_attachment.py
+```
+
+### Attachment Test
+
+The included `test_attachment.py` script demonstrates sending an email with an attachment:
+
+```bash
+python3 test_attachment.py
+```
+
+This script creates a test email with:
+- Plain text body
+- A sample text file attachment
+- Proper MIME encoding
+
 ## Error Handling
 
 The server provides detailed error messages back to SMTP clients:

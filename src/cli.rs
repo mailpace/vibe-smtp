@@ -22,4 +22,16 @@ pub struct Args {
     /// Debug mode
     #[arg(short, long)]
     pub debug: bool,
+    
+    /// Enable attachment support
+    #[arg(long)]
+    pub enable_attachments: bool,
+    
+    /// Maximum attachment size in bytes (default: 10MB)
+    #[arg(long, default_value = "10485760")]
+    pub max_attachment_size: usize,
+    
+    /// Maximum number of attachments per email (default: 10)
+    #[arg(long, default_value = "10")]
+    pub max_attachments: usize,
 }

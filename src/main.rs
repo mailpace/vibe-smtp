@@ -8,6 +8,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 mod cli;
 mod connection;
 mod mailpace;
+mod mime;
 mod smtp;
 mod tls;
 
@@ -43,6 +44,14 @@ async fn main() -> Result<()> {
         info!("Default MailPace API token loaded from environment. Users can override via SMTP AUTH.");
     }
     
+    // Log attachment configuration
+    if args.enable_attachments {
+        info!("Attachment support enabled: max {} attachments, max size {} bytes each", 
+              args.max_attachments, args.max_attachment_size);
+    } else {
+        info!("Attachment support disabled");
+    }
+    
     // Load TLS configuration if enabled
     let tls_acceptor = if args.enable_tls {
         match tls::load_tls_config() {
@@ -70,10 +79,20 @@ async fn main() -> Result<()> {
         let mailpace_endpoint = args.mailpace_endpoint.clone();
         let default_mailpace_token = args.default_mailpace_token.clone();
         let tls_acceptor = tls_acceptor.clone();
+        let enable_attachments = args.enable_attachments;
+        let max_attachment_size = args.max_attachment_size;
+        let max_attachments = args.max_attachments;
         
         tokio::spawn(async move {
             let mailpace_client = MailPaceClient::new(client, mailpace_endpoint);
-            let mut session = SmtpSession::new(mailpace_client, default_mailpace_token, tls_acceptor);
+            let mut session = SmtpSession::new(
+                mailpace_client, 
+                default_mailpace_token, 
+                tls_acceptor,
+                enable_attachments,
+                max_attachment_size,
+                max_attachments,
+            );
             if let Err(e) = session.handle(stream).await {
                 error!("Session error for {}: {}", addr, e);
             }
