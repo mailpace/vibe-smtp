@@ -106,7 +106,7 @@ impl SmtpSession {
                             .accept(plain_stream)
                             .await
                             .context("Failed to establish TLS connection")?;
-                        connection = Connection::Tls(tls_stream);
+                        connection = Connection::Tls(Box::new(tls_stream));
                         info!("TLS connection established");
                     }
                     continue;
