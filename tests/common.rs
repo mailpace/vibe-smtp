@@ -1,4 +1,5 @@
 use anyhow::Result;
+use lettre::transport::smtp::{authentication::Credentials, client::Tls, SmtpTransport};
 use serde_json::json;
 use std::{
     net::SocketAddr,
@@ -14,11 +15,6 @@ use wiremock::{
     matchers::{header, method, path},
     Mock, MockServer, ResponseTemplate,
 };
-use lettre::transport::smtp::{
-    authentication::Credentials,
-    SmtpTransport,
-    client::Tls,
-};
 
 /// Mock MailPace API server for testing
 pub struct MockMailPaceServer {
@@ -30,7 +26,7 @@ impl MockMailPaceServer {
     pub async fn new() -> Self {
         let server = MockServer::start().await;
         let received_requests = Arc::new(Mutex::new(Vec::new()));
-        
+
         Self {
             server,
             received_requests,
@@ -47,7 +43,7 @@ impl MockMailPaceServer {
             })))
             .mount(&self.server)
             .await;
-        
+
         self
     }
 
@@ -59,7 +55,7 @@ impl MockMailPaceServer {
             })))
             .mount(&self.server)
             .await;
-        
+
         self
     }
 
@@ -72,7 +68,7 @@ impl MockMailPaceServer {
             })))
             .mount(&self.server)
             .await;
-        
+
         self
     }
 
@@ -91,12 +87,12 @@ pub struct TestServer {
 impl TestServer {
     pub async fn new() -> Result<Self> {
         let mock_server = MockMailPaceServer::new().await;
-        
+
         // Find available port for SMTP
         let smtp_listener = TcpListener::bind("127.0.0.1:0").await?;
         let smtp_port = smtp_listener.local_addr()?.port();
         drop(smtp_listener);
-        
+
         // Start the vibe-gateway server using pre-built binary to avoid cargo lock issues
         let child = Command::new("./target/release/vibe-gateway")
             .args([
@@ -124,22 +120,24 @@ impl TestServer {
                     .env("MAILPACE_API_TOKEN", "test-token")
                     .spawn()
             })?;
-        
+
         let server = Self {
             child,
             smtp_port,
             mock_server,
         };
-        
+
         // Wait for server to start
         server.wait_for_server().await?;
-        
+
         Ok(server)
     }
 
     async fn wait_for_server(&self) -> Result<()> {
         for _ in 0..30 {
-            if let Ok(_) = tokio::net::TcpStream::connect(format!("127.0.0.1:{}", self.smtp_port)).await {
+            if let Ok(_) =
+                tokio::net::TcpStream::connect(format!("127.0.0.1:{}", self.smtp_port)).await
+            {
                 return Ok(());
             }
             sleep(Duration::from_millis(100)).await;
@@ -161,14 +159,17 @@ impl Drop for TestServer {
 }
 
 /// Helper function to create SMTP transport
-pub fn create_smtp_transport(server_addr: SocketAddr, credentials: Option<Credentials>) -> SmtpTransport {
+pub fn create_smtp_transport(
+    server_addr: SocketAddr,
+    credentials: Option<Credentials>,
+) -> SmtpTransport {
     let mut builder = SmtpTransport::builder_dangerous(server_addr.ip().to_string())
         .port(server_addr.port())
         .tls(Tls::None);
-    
+
     if let Some(creds) = credentials {
         builder = builder.credentials(creds);
     }
-    
+
     builder.build()
 }

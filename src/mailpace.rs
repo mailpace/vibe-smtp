@@ -58,8 +58,9 @@ impl MailPaceClient {
 
     pub async fn send_email(&self, payload: &MailPacePayload, token: &str) -> Result<()> {
         debug!("Sending payload to MailPace: {:?}", payload);
-        
-        let response = self.client
+
+        let response = self
+            .client
             .post(&self.endpoint)
             .header("Accept", "application/json")
             .header("Content-Type", "application/json")
@@ -68,18 +69,26 @@ impl MailPaceClient {
             .send()
             .await
             .context("Failed to send request to MailPace API")?;
-        
+
         if response.status().is_success() {
-            let mailpace_response: MailPaceResponse = response.json().await
+            let mailpace_response: MailPaceResponse = response
+                .json()
+                .await
                 .context("Failed to parse MailPace response")?;
             info!("Email sent successfully, ID: {:?}", mailpace_response.id);
             Ok(())
         } else {
             let status = response.status();
-            let error_text = response.text().await
+            let error_text = response
+                .text()
+                .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            
-            Err(anyhow::anyhow!("MailPace API error ({}): {}", status, error_text))
+
+            Err(anyhow::anyhow!(
+                "MailPace API error ({}): {}",
+                status,
+                error_text
+            ))
         }
     }
 }

@@ -14,7 +14,7 @@ impl Connection {
             Connection::Tls(stream) => stream.write_all(buf).await,
         }
     }
-    
+
     pub async fn flush(&mut self) -> tokio::io::Result<()> {
         match self {
             Connection::Plain(stream) => stream.flush().await,

@@ -17,34 +17,34 @@ impl MimeHeader {
         let mut parts = line.splitn(2, ':');
         let name = parts.next().unwrap_or("").trim().to_lowercase();
         let value = parts.next().unwrap_or("").trim();
-        
+
         // Parse parameters from value (e.g., "text/plain; charset=utf-8")
         let mut params = HashMap::new();
         let mut value_parts = value.split(';');
         let main_value = value_parts.next().unwrap_or("").trim().to_string();
-        
+
         for param in value_parts {
             let param = param.trim();
             if let Some(eq_pos) = param.find('=') {
                 let key = param[..eq_pos].trim().to_lowercase();
                 let mut val = param[eq_pos + 1..].trim();
-                
+
                 // Remove quotes
                 if val.starts_with('"') && val.ends_with('"') {
                     val = &val[1..val.len() - 1];
                 }
-                
+
                 params.insert(key, val.to_string());
             }
         }
-        
+
         Ok(MimeHeader {
             name,
             value: main_value,
             params,
         })
     }
-    
+
     pub fn get_param(&self, name: &str) -> Option<&String> {
         self.params.get(name)
     }
@@ -69,11 +69,11 @@ impl MimePart {
             body: Vec::new(),
         }
     }
-    
+
     pub fn get_header(&self, name: &str) -> Option<&MimeHeader> {
         self.headers.get(&name.to_lowercase())
     }
-    
+
     pub fn is_attachment(&self) -> bool {
         if let Some(disposition) = self.get_header("content-disposition") {
             disposition.value.starts_with("attachment")
@@ -81,23 +81,23 @@ impl MimePart {
             false
         }
     }
-    
+
     pub fn get_filename(&self) -> Option<String> {
         if let Some(disposition) = self.get_header("content-disposition") {
             if let Some(filename) = disposition.get_param("filename") {
                 return Some(filename.clone());
             }
         }
-        
+
         if let Some(content_type) = self.get_header("content-type") {
             if let Some(name) = content_type.get_param("name") {
                 return Some(name.clone());
             }
         }
-        
+
         None
     }
-    
+
     pub fn get_content_type(&self) -> String {
         if let Some(ct) = self.get_header("content-type") {
             ct.value.clone()
@@ -105,29 +105,32 @@ impl MimePart {
             "application/octet-stream".to_string()
         }
     }
-    
+
     pub fn to_attachment(&self) -> Result<Attachment> {
-        let filename = self.get_filename()
+        let filename = self
+            .get_filename()
             .unwrap_or_else(|| "attachment".to_string());
-        
+
         let content_type = self.get_content_type();
-        
+
         // Check if content is already base64 encoded
-        let encoding = self.get_header("content-transfer-encoding")
+        let encoding = self
+            .get_header("content-transfer-encoding")
             .map(|h| h.value.to_lowercase())
             .unwrap_or_else(|| "7bit".to_string());
-        
+
         let content = if encoding == "base64" {
             // Content is already base64 encoded, clean it up
             let content_str = String::from_utf8_lossy(&self.body);
-            content_str.chars()
+            content_str
+                .chars()
                 .filter(|c| !c.is_whitespace())
                 .collect::<String>()
         } else {
             // Content needs to be base64 encoded
             general_purpose::STANDARD.encode(&self.body)
         };
-        
+
         Ok(Attachment {
             name: filename,
             content,
@@ -149,12 +152,15 @@ impl MimeParser {
             max_attachments,
         }
     }
-    
-    pub fn parse_email(&self, email_content: &str) -> Result<(HashMap<String, String>, String, Vec<Attachment>)> {
+
+    pub fn parse_email(
+        &self,
+        email_content: &str,
+    ) -> Result<(HashMap<String, String>, String, Vec<Attachment>)> {
         let mut headers = HashMap::new();
         let mut body_lines = Vec::new();
         let mut in_headers = true;
-        
+
         // First pass: separate headers from body
         for line in email_content.lines() {
             if in_headers {
@@ -162,7 +168,7 @@ impl MimeParser {
                     in_headers = false;
                     continue;
                 }
-                
+
                 if let Some(colon_pos) = line.find(':') {
                     let key = line[..colon_pos].trim().to_lowercase();
                     let value = line[colon_pos + 1..].trim().to_string();
@@ -172,9 +178,9 @@ impl MimeParser {
                 body_lines.push(line);
             }
         }
-        
+
         let body_content = body_lines.join("\n");
-        
+
         // Check if this is a multipart message
         if let Some(content_type) = headers.get("content-type") {
             if content_type.starts_with("multipart/") {
@@ -183,11 +189,11 @@ impl MimeParser {
                 return Ok((headers, text_body, attachments));
             }
         }
-        
+
         // Single part message - no attachments
         Ok((headers, body_content, Vec::new()))
     }
-    
+
     fn extract_boundary(&self, content_type: &str) -> Result<String> {
         for part in content_type.split(';') {
             let part = part.trim();
@@ -197,15 +203,15 @@ impl MimeParser {
         }
         Err(anyhow::anyhow!("No boundary found in Content-Type"))
     }
-    
+
     fn parse_multipart(&self, body: &str, boundary: &str) -> Result<(String, Vec<Attachment>)> {
         let boundary_start = format!("--{}", boundary);
         let boundary_end = format!("--{}--", boundary);
-        
+
         let mut parts = Vec::new();
         let mut current_part = Vec::new();
         let mut in_part = false;
-        
+
         for line in body.lines() {
             if line == boundary_start {
                 if in_part && !current_part.is_empty() {
@@ -222,24 +228,30 @@ impl MimeParser {
                 current_part.push(line);
             }
         }
-        
+
         let mut text_body = String::new();
         let mut attachments = Vec::new();
-        
+
         for part_content in parts {
             let mime_part = self.parse_mime_part(&part_content)?;
-            
+
             if mime_part.is_attachment() {
                 if attachments.len() >= self.max_attachments {
-                    warn!("Maximum number of attachments ({}) exceeded, skipping", self.max_attachments);
+                    warn!(
+                        "Maximum number of attachments ({}) exceeded, skipping",
+                        self.max_attachments
+                    );
                     continue;
                 }
-                
+
                 if mime_part.body.len() > self.max_attachment_size {
-                    warn!("Attachment too large ({} bytes), skipping", mime_part.body.len());
+                    warn!(
+                        "Attachment too large ({} bytes), skipping",
+                        mime_part.body.len()
+                    );
                     continue;
                 }
-                
+
                 match mime_part.to_attachment() {
                     Ok(attachment) => {
                         debug!("Found attachment: {}", attachment.name);
@@ -261,22 +273,22 @@ impl MimeParser {
                 }
             }
         }
-        
+
         Ok((text_body, attachments))
     }
-    
+
     fn parse_mime_part(&self, part_content: &str) -> Result<MimePart> {
         let mut part = MimePart::new();
         let mut body_lines = Vec::new();
         let mut in_headers = true;
-        
+
         for line in part_content.lines() {
             if in_headers {
                 if line.is_empty() {
                     in_headers = false;
                     continue;
                 }
-                
+
                 if let Ok(header) = MimeHeader::parse(line) {
                     part.headers.insert(header.name.clone(), header);
                 }
@@ -284,7 +296,7 @@ impl MimeParser {
                 body_lines.push(line);
             }
         }
-        
+
         part.body = body_lines.join("\n").into_bytes();
         Ok(part)
     }

@@ -61,20 +61,24 @@ TANBgkqhkiG9w0BAQEFAAOCAQ==
 pub fn load_tls_config() -> Result<Option<TlsAcceptor>> {
     let private_key_base64 = std::env::var("PRIVATEKEY");
     let cert_base64 = std::env::var("FULLCHAIN");
-    
+
     let (private_key_pem, cert_pem) = match (private_key_base64, cert_base64) {
         (Ok(key_b64), Ok(cert_b64)) => {
             info!("Loading TLS certificates from environment variables");
             let key_pem = String::from_utf8(
-                general_purpose::STANDARD.decode(key_b64)
-                    .context("Failed to decode PRIVATEKEY base64")?
-            ).context("PRIVATEKEY is not valid UTF-8")?;
-            
+                general_purpose::STANDARD
+                    .decode(key_b64)
+                    .context("Failed to decode PRIVATEKEY base64")?,
+            )
+            .context("PRIVATEKEY is not valid UTF-8")?;
+
             let cert_pem = String::from_utf8(
-                general_purpose::STANDARD.decode(cert_b64)
-                    .context("Failed to decode FULLCHAIN base64")?
-            ).context("FULLCHAIN is not valid UTF-8")?;
-            
+                general_purpose::STANDARD
+                    .decode(cert_b64)
+                    .context("Failed to decode FULLCHAIN base64")?,
+            )
+            .context("FULLCHAIN is not valid UTF-8")?;
+
             (key_pem, cert_pem)
         }
         _ => {
@@ -82,30 +86,30 @@ pub fn load_tls_config() -> Result<Option<TlsAcceptor>> {
             (DEFAULT_KEY_PEM.to_string(), DEFAULT_CERT_PEM.to_string())
         }
     };
-    
+
     // Parse certificates
     let mut cert_reader = std::io::Cursor::new(cert_pem.as_bytes());
     let cert_chain = certs(&mut cert_reader)?
         .into_iter()
         .map(Certificate)
         .collect();
-    
+
     // Parse private key
     let mut key_reader = std::io::Cursor::new(private_key_pem.as_bytes());
     let private_keys = pkcs8_private_keys(&mut key_reader)?;
-    
+
     if private_keys.is_empty() {
         return Err(anyhow::anyhow!("No private keys found"));
     }
-    
+
     let private_key = PrivateKey(private_keys[0].clone());
-    
+
     // Create TLS config
     let tls_config = ServerConfig::builder()
         .with_safe_defaults()
         .with_no_client_auth()
         .with_single_cert(cert_chain, private_key)
         .context("Failed to create TLS config")?;
-    
+
     Ok(Some(TlsAcceptor::from(Arc::new(tls_config))))
 }

@@ -6,31 +6,31 @@ pub struct Args {
     /// SMTP server listen address
     #[arg(short, long, default_value = "127.0.0.1:2525")]
     pub listen: String,
-    
+
     /// MailPace API endpoint
     #[arg(long, default_value = "https://app.mailpace.com/api/v1/send")]
     pub mailpace_endpoint: String,
-    
+
     /// Default MailPace API token (optional, can be overridden by SMTP auth)
     #[arg(long, env = "MAILPACE_API_TOKEN")]
     pub default_mailpace_token: Option<String>,
-    
+
     /// Enable TLS/STARTTLS support
     #[arg(long)]
     pub enable_tls: bool,
-    
+
     /// Debug mode
     #[arg(short, long)]
     pub debug: bool,
-    
+
     /// Enable attachment support
     #[arg(long)]
     pub enable_attachments: bool,
-    
+
     /// Maximum attachment size in bytes (default: 10MB)
     #[arg(long, default_value = "10485760")]
     pub max_attachment_size: usize,
-    
+
     /// Maximum number of attachments per email (default: 10)
     #[arg(long, default_value = "10")]
     pub max_attachments: usize,
