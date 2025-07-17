@@ -97,11 +97,9 @@ impl TestServer {
         let smtp_port = smtp_listener.local_addr()?.port();
         drop(smtp_listener);
         
-        // Start the vibe-gateway server
-        let child = Command::new("cargo")
+        // Start the vibe-gateway server using pre-built binary to avoid cargo lock issues
+        let child = Command::new("./target/release/vibe-gateway")
             .args([
-                "run",
-                "--",
                 "--listen",
                 &format!("127.0.0.1:{}", smtp_port),
                 "--mailpace-endpoint",
@@ -109,7 +107,23 @@ impl TestServer {
                 "--debug",
             ])
             .env("MAILPACE_API_TOKEN", "test-token")
-            .spawn()?;
+            .spawn()
+            .or_else(|_| {
+                // Fallback to cargo run if binary doesn't exist
+                Command::new("cargo")
+                    .args([
+                        "run",
+                        "--release",
+                        "--",
+                        "--listen",
+                        &format!("127.0.0.1:{}", smtp_port),
+                        "--mailpace-endpoint",
+                        &format!("{}/api/v1/send", mock_server.server.uri()),
+                        "--debug",
+                    ])
+                    .env("MAILPACE_API_TOKEN", "test-token")
+                    .spawn()
+            })?;
         
         let server = Self {
             child,
@@ -141,6 +155,8 @@ impl TestServer {
 impl Drop for TestServer {
     fn drop(&mut self) {
         let _ = self.child.kill();
+        // Give the process time to clean up
+        std::thread::sleep(Duration::from_millis(100));
     }
 }
 

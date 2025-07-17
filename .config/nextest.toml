@@ -1,0 +1,95 @@
+[store]
+# Store test results and timing data
+dir = "nextest"
+
+[profile.default]
+# Default profile for regular test runs
+retries = 1
+slow-timeout = { period = "60s", terminate-after = 2 }
+leak-timeout = "100ms"
+
+# Test threads - use logical CPU count
+test-threads = "num-cpus"
+
+# Filter settings
+filter = "all"
+
+# Success output
+success-output = "immediate"
+failure-output = "immediate"
+
+# Status level
+status-level = "all"
+
+# Final status level
+final-status-level = "slow"
+
+[profile.ci]
+# Profile optimized for CI environments
+retries = 2
+slow-timeout = { period = "120s", terminate-after = 3 }
+leak-timeout = "1s"
+
+# Reduce parallelism in CI
+test-threads = 4
+
+# More verbose output in CI
+success-output = "final"
+failure-output = "immediate-final"
+status-level = "retry"
+final-status-level = "slow"
+
+[profile.integration]
+# Profile for integration tests - run sequentially to avoid server conflicts
+retries = 2
+slow-timeout = { period = "300s", terminate-after = 1 }
+leak-timeout = "5s"
+
+# Run integration tests sequentially to avoid cargo lock conflicts
+test-threads = 1
+
+# Integration tests are in the integration_tests binary
+filter = "binary(integration_tests)"
+success-output = "immediate"
+failure-output = "immediate"
+
+# Additional settings for integration tests
+[profile.integration.override]
+filter = "binary(integration_tests)"
+
+[profile.performance]
+# Profile for performance tests
+retries = 0
+slow-timeout = { period = "600s", terminate-after = 1 }
+leak-timeout = "10s"
+
+# Run performance tests sequentially
+test-threads = 1
+
+# Performance tests are in the performance_tests binary
+filter = "binary(performance_tests)"
+success-output = "final"
+failure-output = "immediate"
+
+[profile.unit]
+# Profile for unit tests only
+retries = 1
+slow-timeout = { period = "30s", terminate-after = 2 }
+leak-timeout = "100ms"
+
+# Unit tests can run in parallel
+test-threads = "num-cpus"
+
+# Filter to run only lib tests and mailpace_tests
+filter = "binary(vibe_gateway) or binary(mailpace_tests)"
+
+[test-groups]
+# Define test groups for better organization - integration tests must run sequentially
+integration = { max-threads = 1 }
+performance = { max-threads = 1 }
+unit = { max-threads = 8 }
+
+# Custom test groups based on module names
+smtp = { max-threads = 1 }
+mailpace = { max-threads = 2 }
+connection = { max-threads = 1 }

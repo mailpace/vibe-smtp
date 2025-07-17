@@ -31,27 +31,34 @@ jobs:
           target
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
     
+    - name: Install cargo-nextest
+      uses: taiki-e/install-action@nextest
+      
+    - name: Install cargo-tarpaulin
+      uses: taiki-e/install-action@tarpaulin
+    
     - name: Check formatting
       run: cargo fmt --all -- --check
     
     - name: Run clippy
       run: cargo clippy --all-targets --all-features -- -D warnings
     
-    - name: Run unit tests
-      run: cargo test --lib
-    
     - name: Build project
       run: cargo build --release
     
+    - name: Run unit tests
+      run: cargo nextest run --profile unit
+    
     - name: Run integration tests
-      run: cargo test --test integration_tests
+      run: cargo nextest run --profile integration
       env:
         RUST_LOG: debug
     
+    - name: Run performance tests
+      run: cargo nextest run --profile performance --release
+    
     - name: Run all tests with coverage
-      run: |
-        cargo install cargo-tarpaulin
-        cargo tarpaulin --out xml --output-dir coverage/
+      run: cargo tarpaulin --engine llvm --out xml --output-dir coverage/ --skip-clean
       continue-on-error: true
     
     - name: Upload coverage to Codecov

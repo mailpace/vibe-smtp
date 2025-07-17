@@ -1,6 +1,24 @@
 # Test Suite Documentation
 
-This document describes the comprehensive testing suite for the Vibe Gateway SMTP server.
+This document describes the comprehensive testing suite for the Vibe Gateway SMTP server using cargo-nextest.
+
+## Test Infrastructure
+
+### cargo-nextest
+This project uses [cargo-nextest](https://nexte.st/) for test execution, which provides:
+- **Faster execution**: Parallel test execution with intelligent scheduling
+- **Better isolation**: Tests run in separate processes with proper cleanup
+- **Rich output**: Detailed timing, retry information, and multiple output formats
+- **Configurable profiles**: Different test configurations for various scenarios
+- **Reliable results**: Built-in retry mechanisms and flaky test detection
+
+### Test Profiles
+The project includes several nextest profiles configured in `.config/nextest.toml`:
+- **default**: Standard test execution with retries and reasonable timeouts
+- **ci**: Optimized for continuous integration with increased timeouts
+- **integration**: Specific settings for integration tests with reduced parallelism
+- **performance**: Sequential execution for performance tests
+- **unit**: Fast execution for unit tests only
 
 ## Test Structure
 
@@ -46,41 +64,82 @@ This document describes the comprehensive testing suite for the Vibe Gateway SMT
 # Install Rust and Cargo
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Install test dependencies
+# Install cargo-nextest
+cargo install cargo-nextest --locked
+
+# Build the project
 cargo build
 ```
 
-### Running All Tests
+### Using the Test Runner Script
 ```bash
-# Run all tests
-cargo test
+# Run all tests with the test runner
+./test.sh
+
+# Run specific test suites
+./test.sh unit           # Unit tests only
+./test.sh integration    # Integration tests only
+./test.sh performance    # Performance tests only
+
+# Run tests with pattern matching
+./test.sh pattern "smtp"  # Run tests matching "smtp"
+
+# Run tests in watch mode
+./test.sh watch
+
+# Generate coverage report
+./test.sh coverage
+
+# Show detailed timing information
+./test.sh timing
+```
+
+### Running Tests with cargo-nextest Directly
+```bash
+# Run all tests with nextest
+cargo nextest run
+
+# Run tests with specific profile
+cargo nextest run --profile ci
+cargo nextest run --profile integration
+cargo nextest run --profile performance
 
 # Run tests with output
-cargo test -- --nocapture
+cargo nextest run --success-output immediate
 
 # Run tests with debug logging
-RUST_LOG=debug cargo test
+RUST_LOG=debug cargo nextest run
 ```
 
 ### Running Specific Test Suites
 ```bash
 # Integration tests only
-cargo test --test integration_tests
+cargo nextest run --profile integration
 
-# Unit tests only
-cargo test --test mailpace_tests
+# Unit tests only  
+cargo nextest run --profile unit
 
 # Performance tests only
-cargo test --test performance_tests --release
+cargo nextest run --profile performance --release
+
+# Tests matching a pattern
+cargo nextest run -E 'test(smtp)'
+cargo nextest run -E 'test(mailpace)'
 ```
 
-### Running Individual Tests
+### Advanced nextest Features
 ```bash
-# Run a specific test
-cargo test test_basic_email_sending
+# Run tests with retries
+cargo nextest run --retries 3
 
-# Run tests matching a pattern
-cargo test email_with_attachment
+# Run with timing information
+cargo nextest run --final-status-level slow
+
+# Generate JUnit XML output
+cargo nextest run --profile ci --output-format junit > test-results.xml
+
+# Run tests with specific timeout
+cargo nextest run --profile default --slow-timeout 120s
 ```
 
 ## Test Environment Setup
