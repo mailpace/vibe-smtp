@@ -97,7 +97,7 @@ impl TestServer {
         let child = Command::new("./target/release/vibe-gateway")
             .args([
                 "--listen",
-                &format!("127.0.0.1:{}", smtp_port),
+                &format!("127.0.0.1:{smtp_port}"),
                 "--mailpace-endpoint",
                 &format!("{}/api/v1/send", mock_server.server.uri()),
                 "--debug",
@@ -112,7 +112,7 @@ impl TestServer {
                         "--release",
                         "--",
                         "--listen",
-                        &format!("127.0.0.1:{}", smtp_port),
+                        &format!("127.0.0.1:{smtp_port}"),
                         "--mailpace-endpoint",
                         &format!("{}/api/v1/send", mock_server.server.uri()),
                         "--debug",

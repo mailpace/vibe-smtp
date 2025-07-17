@@ -29,10 +29,10 @@ async fn test_concurrent_email_sending() -> Result<()> {
             );
 
             let email = Message::builder()
-                .from(format!("test{}@example.com", i).parse().unwrap())
+                .from(format!("test{i}@example.com").parse().unwrap())
                 .to("recipient@example.com".parse().unwrap())
-                .subject(format!("Test Subject {}", i))
-                .body(format!("Test message body {}", i))
+                .subject(format!("Test Subject {i}"))
+                .body(format!("Test message body {i}"))
                 .unwrap();
 
             transport.send(&email)
@@ -56,11 +56,10 @@ async fn test_concurrent_email_sending() -> Result<()> {
     // Performance assertion: should complete within reasonable time
     assert!(
         duration < Duration::from_secs(30),
-        "Concurrent sends took too long: {:?}",
-        duration
+        "Concurrent sends took too long: {duration:?}"
     );
 
-    println!("Sent {} emails concurrently in {:?}", num_emails, duration);
+    println!("Sent {num_emails} emails concurrently in {duration:?}");
 
     Ok(())
 }
@@ -84,25 +83,24 @@ async fn test_throughput_measurement() -> Result<()> {
     // Send emails sequentially to measure throughput
     for i in 0..num_emails {
         let email = Message::builder()
-            .from(format!("test{}@example.com", i).parse()?)
+            .from(format!("test{i}@example.com").parse()?)
             .to("recipient@example.com".parse()?)
-            .subject(format!("Throughput Test {}", i))
-            .body(format!("Test message body {}", i))?;
+            .subject(format!("Throughput Test {i}"))
+            .body(format!("Test message body {i}"))?;
 
         let result = transport.send(&email);
-        assert!(result.is_ok(), "Email {} should be sent successfully", i);
+        assert!(result.is_ok(), "Email {i} should be sent successfully");
     }
 
     let duration = start_time.elapsed();
     let throughput = num_emails as f64 / duration.as_secs_f64();
 
-    println!("Throughput: {:.2} emails/second", throughput);
+    println!("Throughput: {throughput:.2} emails/second");
 
     // Performance assertion: should handle at least 5 emails per second
     assert!(
         throughput > 5.0,
-        "Throughput too low: {:.2} emails/second",
-        throughput
+        "Throughput too low: {throughput:.2} emails/second"
     );
 
     Ok(())
@@ -137,13 +135,12 @@ async fn test_large_email_performance() -> Result<()> {
 
     let duration = start_time.elapsed();
 
-    println!("Large email (1MB) sent in {:?}", duration);
+    println!("Large email (1MB) sent in {duration:?}");
 
     // Performance assertion: should handle 1MB email within 10 seconds
     assert!(
         duration < Duration::from_secs(10),
-        "Large email took too long: {:?}",
-        duration
+        "Large email took too long: {duration:?}"
     );
 
     Ok(())
@@ -171,10 +168,10 @@ async fn test_connection_handling_under_load() -> Result<()> {
             );
 
             let email = Message::builder()
-                .from(format!("test{}@example.com", i).parse().unwrap())
+                .from(format!("test{i}@example.com").parse().unwrap())
                 .to("recipient@example.com".parse().unwrap())
-                .subject(format!("Load Test {}", i))
-                .body(format!("Load test message {}", i))
+                .subject(format!("Load Test {i}"))
+                .body(format!("Load test message {i}"))
                 .unwrap();
 
             transport.send(&email)
@@ -194,15 +191,13 @@ async fn test_connection_handling_under_load() -> Result<()> {
     assert_eq!(successful_sends, num_connections);
 
     println!(
-        "Handled {} concurrent connections in {:?}",
-        num_connections, duration
+        "Handled {num_connections} concurrent connections in {duration:?}"
     );
 
     // Performance assertion: should handle multiple connections efficiently
     assert!(
         duration < Duration::from_secs(60),
-        "Connection handling took too long: {:?}",
-        duration
+        "Connection handling took too long: {duration:?}"
     );
 
     Ok(())
@@ -234,7 +229,7 @@ async fn test_memory_usage_with_attachments() -> Result<()> {
     for i in 0..num_attachments {
         let attachment_content =
             format!("Attachment {} content: {}", i, "X".repeat(attachment_size));
-        let attachment = lettre::message::Attachment::new(format!("attachment_{}.txt", i)).body(
+        let attachment = lettre::message::Attachment::new(format!("attachment_{i}.txt")).body(
             attachment_content,
             lettre::message::header::ContentType::TEXT_PLAIN,
         );
@@ -265,8 +260,7 @@ async fn test_memory_usage_with_attachments() -> Result<()> {
     // Performance assertion: should handle attachments efficiently
     assert!(
         duration < Duration::from_secs(30),
-        "Attachment processing took too long: {:?}",
-        duration
+        "Attachment processing took too long: {duration:?}"
     );
 
     Ok(())
@@ -291,16 +285,15 @@ async fn test_stress_test_rapid_emails() -> Result<()> {
     // Send emails as fast as possible
     for i in 0..num_emails {
         let email = Message::builder()
-            .from(format!("stress{}@example.com", i).parse()?)
+            .from(format!("stress{i}@example.com").parse()?)
             .to("recipient@example.com".parse()?)
-            .subject(format!("Stress Test {}", i))
-            .body(format!("Stress test message {}", i))?;
+            .subject(format!("Stress Test {i}"))
+            .body(format!("Stress test message {i}"))?;
 
         let result = transport.send(&email);
         assert!(
             result.is_ok(),
-            "Stress test email {} should be sent successfully",
-            i
+            "Stress test email {i} should be sent successfully"
         );
 
         // Small delay to prevent overwhelming the system
@@ -311,15 +304,13 @@ async fn test_stress_test_rapid_emails() -> Result<()> {
     let throughput = num_emails as f64 / duration.as_secs_f64();
 
     println!(
-        "Stress test: {} emails in {:?} ({:.2} emails/second)",
-        num_emails, duration, throughput
+        "Stress test: {num_emails} emails in {duration:?} ({throughput:.2} emails/second)"
     );
 
     // Performance assertion: should handle rapid emails
     assert!(
         duration < Duration::from_secs(120),
-        "Stress test took too long: {:?}",
-        duration
+        "Stress test took too long: {duration:?}"
     );
 
     Ok(())

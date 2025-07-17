@@ -205,8 +205,8 @@ impl MimeParser {
     }
 
     fn parse_multipart(&self, body: &str, boundary: &str) -> Result<(String, Vec<Attachment>)> {
-        let boundary_start = format!("--{}", boundary);
-        let boundary_end = format!("--{}--", boundary);
+        let boundary_start = format!("--{boundary}");
+        let boundary_end = format!("--{boundary}--");
 
         let mut parts = Vec::new();
         let mut current_part = Vec::new();

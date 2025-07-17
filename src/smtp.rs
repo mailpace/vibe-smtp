@@ -173,7 +173,7 @@ impl SmtpSession {
             }
             Err(e) => {
                 error!("Failed to send email to MailPace: {}", e);
-                self.send_response(connection, &format!("550 Error: {}", e))
+                self.send_response(connection, &format!("550 Error: {e}"))
                     .await?;
             }
         }
@@ -431,7 +431,7 @@ impl SmtpSession {
     async fn send_response(&self, connection: &mut Connection, response: &str) -> Result<()> {
         debug!("Sending response: {}", response);
         connection
-            .write_all(format!("{}\r\n", response).as_bytes())
+            .write_all(format!("{response}\r\n").as_bytes())
             .await?;
         connection.flush().await?;
         Ok(())

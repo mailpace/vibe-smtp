@@ -4,7 +4,7 @@ use tokio_rustls::server::TlsStream;
 
 pub enum Connection {
     Plain(TcpStream),
-    Tls(TlsStream<TcpStream>),
+    Tls(Box<TlsStream<TcpStream>>),
 }
 
 impl Connection {
