@@ -190,9 +190,7 @@ async fn test_connection_handling_under_load() -> Result<()> {
 
     assert_eq!(successful_sends, num_connections);
 
-    println!(
-        "Handled {num_connections} concurrent connections in {duration:?}"
-    );
+    println!("Handled {num_connections} concurrent connections in {duration:?}");
 
     // Performance assertion: should handle multiple connections efficiently
     assert!(
@@ -303,9 +301,7 @@ async fn test_stress_test_rapid_emails() -> Result<()> {
     let duration = start_time.elapsed();
     let throughput = num_emails as f64 / duration.as_secs_f64();
 
-    println!(
-        "Stress test: {num_emails} emails in {duration:?} ({throughput:.2} emails/second)"
-    );
+    println!("Stress test: {num_emails} emails in {duration:?} ({throughput:.2} emails/second)");
 
     // Performance assertion: should handle rapid emails
     assert!(

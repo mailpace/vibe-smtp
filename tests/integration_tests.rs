@@ -134,7 +134,10 @@ async fn test_email_with_mailpace_headers() -> Result<()> {
 #[tokio::test]
 async fn test_authentication_failure() -> Result<()> {
     let server = TestServer::new().await?;
-    server.mock_server.setup_error_response(401, "Unauthorized").await;
+    server
+        .mock_server
+        .setup_error_response(401, "Unauthorized")
+        .await;
 
     let transport = create_smtp_transport(
         server.smtp_address(),

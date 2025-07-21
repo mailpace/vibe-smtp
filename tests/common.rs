@@ -1,10 +1,7 @@
 use anyhow::Result;
 use lettre::transport::smtp::{authentication::Credentials, client::Tls, SmtpTransport};
 use serde_json::json;
-use std::{
-    net::SocketAddr,
-    time::Duration,
-};
+use std::{net::SocketAddr, time::Duration};
 use tokio::{
     net::TcpListener,
     process::{Child, Command},
@@ -24,9 +21,7 @@ impl MockMailPaceServer {
     pub async fn new() -> Self {
         let server = MockServer::start().await;
 
-        Self {
-            server,
-        }
+        Self { server }
     }
 
     pub async fn setup_success_response(&self) -> &Self {
@@ -114,7 +109,8 @@ impl TestServer {
 
     async fn wait_for_server(&self) -> Result<()> {
         for _ in 0..30 {
-            if (tokio::net::TcpStream::connect(format!("127.0.0.1:{}", self.smtp_port)).await).is_ok()
+            if (tokio::net::TcpStream::connect(format!("127.0.0.1:{}", self.smtp_port)).await)
+                .is_ok()
             {
                 return Ok(());
             }
