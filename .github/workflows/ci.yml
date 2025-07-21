@@ -28,8 +28,9 @@ jobs:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
+          ~/.cargo/bin
           target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-v2
     
     - name: Install cargo-nextest
       uses: taiki-e/install-action@v2
@@ -39,7 +40,7 @@ jobs:
     - name: Install cargo-tarpaulin
       uses: taiki-e/install-action@v2
       with:
-        tool: tarpaulin
+        tool: cargo-tarpaulin
     
     - name: Check formatting
       run: cargo fmt --all -- --check
@@ -62,7 +63,7 @@ jobs:
       run: cargo nextest run --profile performance --release
     
     - name: Run all tests with coverage
-      run: cargo tarpaulin --engine llvm --out xml --output-dir coverage/ --skip-clean
+      run: cargo tarpaulin --config tarpaulin.toml
       continue-on-error: true
     
     - name: Upload coverage to Codecov
