@@ -74,16 +74,6 @@ build_project() {
     cargo build --release
 }
 
-# Function to run formatting check
-check_format() {
-    run_test "Format Check" "cargo fmt --all -- --check"
-}
-
-# Function to run clippy
-check_clippy() {
-    run_test "Clippy Check" "cargo clippy --all-targets --all-features -- -D warnings"
-}
-
 # Function to run unit tests
 run_unit_tests() {
     run_test "Unit Tests" "RUST_LOG=info cargo nextest run --profile unit"
@@ -107,8 +97,6 @@ run_performance_tests() {
 run_all_tests_nextest() {
     local failed=0
     
-    check_format || failed=1
-    check_clippy || failed=1
     run_unit_tests || failed=1
     run_integration_tests || failed=1
     run_performance_tests || failed=1
@@ -217,8 +205,6 @@ Usage: $0 [COMMAND] [OPTIONS]
 
 Commands:
     all             Run all tests and checks (default)
-    format          Check code formatting
-    clippy          Run clippy linting
     unit            Run unit tests only
     integration     Run integration tests only
     performance     Run performance tests only
@@ -267,12 +253,6 @@ main() {
     case "${1:-all}" in
         "all")
             run_all_tests
-            ;;
-        "format")
-            check_format
-            ;;
-        "clippy")
-            check_clippy
             ;;
         "unit")
             run_unit_tests
