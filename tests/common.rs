@@ -126,7 +126,10 @@ impl TestServer {
 
 impl Drop for TestServer {
     fn drop(&mut self) {
-        let _ = self.child.kill();
+        // Kill the child process synchronously
+        if let Err(e) = self.child.start_kill() {
+            eprintln!("Failed to kill child process: {e}");
+        }
         // Give the process time to clean up
         std::thread::sleep(Duration::from_millis(100));
     }
