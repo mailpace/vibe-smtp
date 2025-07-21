@@ -32,10 +32,14 @@ jobs:
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
     
     - name: Install cargo-nextest
-      uses: taiki-e/install-action@nextest
+      uses: taiki-e/install-action@v2
+      with:
+        tool: nextest
       
     - name: Install cargo-tarpaulin
-      uses: taiki-e/install-action@tarpaulin
+      uses: taiki-e/install-action@v2
+      with:
+        tool: tarpaulin
     
     - name: Check formatting
       run: cargo fmt --all -- --check

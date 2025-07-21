@@ -3,7 +3,6 @@ use lettre::transport::smtp::{authentication::Credentials, client::Tls, SmtpTran
 use serde_json::json;
 use std::{
     net::SocketAddr,
-    sync::{Arc, Mutex},
     time::Duration,
 };
 use tokio::{
@@ -19,17 +18,14 @@ use wiremock::{
 /// Mock MailPace API server for testing
 pub struct MockMailPaceServer {
     pub server: MockServer,
-    pub received_requests: Arc<Mutex<Vec<serde_json::Value>>>,
 }
 
 impl MockMailPaceServer {
     pub async fn new() -> Self {
         let server = MockServer::start().await;
-        let received_requests = Arc::new(Mutex::new(Vec::new()));
 
         Self {
             server,
-            received_requests,
         }
     }
 
@@ -57,23 +53,6 @@ impl MockMailPaceServer {
             .await;
 
         self
-    }
-
-    pub async fn setup_capture_requests(&self) -> &Self {
-        Mock::given(method("POST"))
-            .and(path("/api/v1/send"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "id": "test-message-id",
-                "status": "sent"
-            })))
-            .mount(&self.server)
-            .await;
-
-        self
-    }
-
-    pub fn get_captured_requests(&self) -> Vec<serde_json::Value> {
-        self.received_requests.lock().unwrap().clone()
     }
 }
 
@@ -135,8 +114,7 @@ impl TestServer {
 
     async fn wait_for_server(&self) -> Result<()> {
         for _ in 0..30 {
-            if let Ok(_) =
-                tokio::net::TcpStream::connect(format!("127.0.0.1:{}", self.smtp_port)).await
+            if (tokio::net::TcpStream::connect(format!("127.0.0.1:{}", self.smtp_port)).await).is_ok()
             {
                 return Ok(());
             }
