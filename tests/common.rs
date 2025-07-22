@@ -68,8 +68,6 @@ impl TestServer {
         Self::new_with_config(&["--enable-html-compression"]).await
     }
 
-
-
     pub async fn new_with_config(extra_args: &[&str]) -> Result<Self> {
         let mock_server = MockMailPaceServer::new().await;
 
