@@ -60,6 +60,18 @@ pub struct TestServer {
 
 impl TestServer {
     pub async fn new() -> Result<Self> {
+        Self::new_with_config(&[]).await
+    }
+
+    pub async fn new_with_html_compression() -> Result<Self> {
+        Self::new_with_config(&["--enable-html-compression"]).await
+    }
+
+    pub async fn new_with_attachments() -> Result<Self> {
+        Self::new_with_config(&["--enable-attachments"]).await
+    }
+
+    pub async fn new_with_config(extra_args: &[&str]) -> Result<Self> {
         let mock_server = MockMailPaceServer::new().await;
 
         // Find available port for SMTP
@@ -67,30 +79,35 @@ impl TestServer {
         let smtp_port = smtp_listener.local_addr()?.port();
         drop(smtp_listener);
 
+        // Create the formatted strings first to ensure they live long enough
+        let listen_addr = format!("127.0.0.1:{smtp_port}");
+        let mailpace_endpoint = format!("{}/api/v1/send", mock_server.server.uri());
+
+        let mut base_args = vec![
+            "--listen",
+            &listen_addr,
+            "--mailpace-endpoint",
+            &mailpace_endpoint,
+            "--debug",
+        ];
+
+        // Add extra configuration arguments
+        for arg in extra_args {
+            base_args.push(arg);
+        }
+
         // Start the vibe-gateway server using pre-built binary to avoid cargo lock issues
         let child = Command::new("./target/release/vibe-gateway")
-            .args([
-                "--listen",
-                &format!("127.0.0.1:{smtp_port}"),
-                "--mailpace-endpoint",
-                &format!("{}/api/v1/send", mock_server.server.uri()),
-                "--debug",
-            ])
+            .args(&base_args)
             .env("MAILPACE_API_TOKEN", "test-token")
             .spawn()
             .or_else(|_| {
                 // Fallback to cargo run if binary doesn't exist
+                let mut cargo_args = vec!["run", "--release", "--"];
+                cargo_args.extend(&base_args);
+                
                 Command::new("cargo")
-                    .args([
-                        "run",
-                        "--release",
-                        "--",
-                        "--listen",
-                        &format!("127.0.0.1:{smtp_port}"),
-                        "--mailpace-endpoint",
-                        &format!("{}/api/v1/send", mock_server.server.uri()),
-                        "--debug",
-                    ])
+                    .args(&cargo_args)
                     .env("MAILPACE_API_TOKEN", "test-token")
                     .spawn()
             })?;

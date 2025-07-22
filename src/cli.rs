@@ -34,4 +34,8 @@ pub struct Args {
     /// Maximum number of attachments per email (default: 10)
     #[arg(long, default_value = "10")]
     pub max_attachments: usize,
+
+    /// Enable HTML compression for email bodies
+    #[arg(long)]
+    pub enable_html_compression: bool,
 }

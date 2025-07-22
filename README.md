@@ -18,6 +18,11 @@ The server supports the following configuration options:
 - `--listen` or `-l`: SMTP server listen address (default: `127.0.0.1:2525`)
 - `--mailpace-endpoint`: MailPace API endpoint (default: `https://app.mailpace.com/api/v1/send`)
 - `--default-mailpace-token`: Default MailPace API token (optional, can also be set via `MAILPACE_API_TOKEN` environment variable)
+- `--enable-tls`: Enable TLS/STARTTLS support
+- `--enable-attachments`: Enable attachment parsing and forwarding
+- `--max-attachment-size`: Maximum size per attachment in bytes (default: 10MB)
+- `--max-attachments`: Maximum number of attachments per email (default: 10)
+- `--enable-html-compression`: Enable HTML compression for email bodies
 - `--debug` or `-d`: Enable debug logging
 
 ## Authentication
@@ -137,6 +142,65 @@ cargo run -- --enable-attachments --max-attachment-size 5242880 --max-attachment
 python3 test_attachment.py
 ```
 
+## HTML Compression
+
+The server supports HTML compression for email bodies to reduce bandwidth and improve delivery performance:
+
+```bash
+cargo run -- --enable-html-compression
+```
+
+### HTML Compression Features
+
+- **Automatic Detection**: Only compresses content that appears to be HTML
+- **Safe Compression**: Preserves email client compatibility by keeping essential tags
+- **Comment Removal**: Strips HTML comments to reduce size
+- **Whitespace Optimization**: Removes unnecessary whitespace while preserving content
+- **CSS/JS Minification**: Minifies inline CSS and JavaScript
+- **Fallback Handling**: Uses original content if compression fails
+
+### Compression Configuration
+
+- `--enable-html-compression`: Enable HTML compression for email bodies
+
+### How It Works
+
+When HTML compression is enabled, the server:
+1. Detects HTML content using heuristics (looks for common HTML tags)
+2. Applies safe compression settings optimized for email clients
+3. Removes comments and unnecessary whitespace
+4. Minifies inline CSS and JavaScript
+5. Logs compression statistics for monitoring
+6. Falls back to original content if compression fails
+
+### Example Usage
+
+```bash
+# Enable both attachments and HTML compression
+cargo run -- --enable-attachments --enable-html-compression
+
+# Or with TLS support
+cargo run -- --enable-tls --enable-html-compression
+```
+
+### HTML Compression Testing
+
+Test HTML compression with the included script:
+
+```bash
+# Start server with compression enabled
+cargo run -- --enable-html-compression --debug
+
+# In another terminal, run the test script
+./test_html_compression.py
+```
+
+The test script sends HTML emails with:
+- Comments and extra whitespace
+- Inline CSS and JavaScript
+- Complex HTML structures
+- Compression statistics in server logs
+
 ### Attachment Test
 
 The included `test_attachment.py` script demonstrates sending an email with an attachment:
@@ -228,6 +292,7 @@ cargo test --test performance_tests --release
 - **SMTP Protocol**: Command handling, authentication, data transfer
 - **MailPace Integration**: API calls, error handling, payload formatting
 - **Email Processing**: Attachments, HTML/text content, headers
+- **HTML Compression**: Compression functionality, performance impact, edge cases
 - **Performance**: Concurrent connections, throughput, resource usage
 - **Security**: Authentication, input validation, error handling
 

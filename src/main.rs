@@ -6,6 +6,7 @@ use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod cli;
+mod compression;
 mod connection;
 mod mailpace;
 mod mime;
@@ -53,6 +54,13 @@ async fn main() -> Result<()> {
         info!("Attachment support disabled");
     }
 
+    // Log HTML compression configuration
+    if args.enable_html_compression {
+        info!("HTML compression enabled for email bodies");
+    } else {
+        info!("HTML compression disabled");
+    }
+
     // Load TLS configuration if enabled
     let tls_acceptor = if args.enable_tls {
         match tls::load_tls_config() {
@@ -83,6 +91,7 @@ async fn main() -> Result<()> {
         let enable_attachments = args.enable_attachments;
         let max_attachment_size = args.max_attachment_size;
         let max_attachments = args.max_attachments;
+        let enable_html_compression = args.enable_html_compression;
 
         tokio::spawn(async move {
             let mailpace_client = MailPaceClient::new(client, mailpace_endpoint);
@@ -93,6 +102,7 @@ async fn main() -> Result<()> {
                 enable_attachments,
                 max_attachment_size,
                 max_attachments,
+                enable_html_compression,
             );
             if let Err(e) = session.handle(stream).await {
                 error!("Session error for {}: {}", addr, e);

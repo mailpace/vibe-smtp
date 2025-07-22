@@ -4,11 +4,12 @@ use std::collections::HashMap;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::TcpStream;
 use tokio_rustls::TlsAcceptor;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use crate::connection::Connection;
 use crate::mailpace::{MailPaceClient, MailPacePayload};
 use crate::mime::MimeParser;
+use crate::compression::HtmlCompressor;
 
 #[derive(Debug, PartialEq)]
 pub enum SmtpState {
@@ -35,6 +36,8 @@ pub struct SmtpSession {
     enable_attachments: bool,
     max_attachment_size: usize,
     max_attachments: usize,
+    enable_html_compression: bool,
+    html_compressor: Option<HtmlCompressor>,
 }
 
 impl SmtpSession {
@@ -45,8 +48,15 @@ impl SmtpSession {
         enable_attachments: bool,
         max_attachment_size: usize,
         max_attachments: usize,
+        enable_html_compression: bool,
     ) -> Self {
         let supports_starttls = tls_acceptor.is_some();
+        let html_compressor = if enable_html_compression {
+            Some(HtmlCompressor::new())
+        } else {
+            None
+        };
+
         Self {
             mailpace_client,
             default_mailpace_token,
@@ -61,6 +71,8 @@ impl SmtpSession {
             enable_attachments,
             max_attachment_size,
             max_attachments,
+            enable_html_compression,
+            html_compressor,
         }
     }
 
@@ -400,9 +412,20 @@ impl SmtpSession {
                 .collect::<Vec<_>>()
         });
 
-        // Simple HTML detection
+        // Simple HTML detection and compression
         let (htmlbody, textbody) = if body.contains("<html>") || body.contains("<HTML>") {
-            (Some(body), None)
+            let compressed_html = if let Some(ref compressor) = self.html_compressor {
+                match compressor.compress_html(&body) {
+                    Ok(compressed) => compressed,
+                    Err(e) => {
+                        warn!("Failed to compress HTML: {}, using original", e);
+                        body
+                    }
+                }
+            } else {
+                body
+            };
+            (Some(compressed_html), None)
         } else {
             (None, Some(body))
         };
@@ -465,6 +488,7 @@ mod tests {
             false,
             1024 * 1024, // 1MB
             5,
+            false, // HTML compression disabled for most tests
         )
     }
 
@@ -478,6 +502,21 @@ mod tests {
             true,
             1024 * 1024, // 1MB
             5,
+            false, // HTML compression disabled for most tests
+        )
+    }
+
+    fn create_test_session_with_html_compression() -> SmtpSession {
+        let client = Client::new();
+        let mailpace_client = MailPaceClient::new(client, "https://api.mailpace.com/v1/send".to_string());
+        SmtpSession::new(
+            mailpace_client,
+            Some("test-token".to_string()),
+            None,
+            false,
+            1024 * 1024, // 1MB
+            5,
+            true, // HTML compression enabled
         )
     }
 
@@ -513,6 +552,17 @@ mod tests {
     fn test_smtp_session_new_with_attachments() {
         let session = create_test_session_with_attachments();
         assert_eq!(session.enable_attachments, true);
+    }
+
+    #[test]
+    fn test_smtp_session_new_with_html_compression() {
+        let session = create_test_session_with_html_compression();
+        assert_eq!(session.enable_html_compression, true);
+        assert!(session.html_compressor.is_some());
+        
+        let session_no_compression = create_test_session();
+        assert_eq!(session_no_compression.enable_html_compression, false);
+        assert!(session_no_compression.html_compressor.is_none());
     }
 
     #[tokio::test]
@@ -803,6 +853,47 @@ mod tests {
         
         let payload = result.unwrap();
         assert_eq!(payload.htmlbody, Some("<html><body>Test HTML content</body></html>".to_string()));
+        assert_eq!(payload.textbody, None);
+    }
+
+    #[test]
+    fn test_parse_email_to_mailpace_payload_html_with_compression() {
+        let mut session = create_test_session_with_html_compression();
+        session.mail_from = Some("sender@example.com".to_string());
+        session.rcpt_to = vec!["recipient@example.com".to_string()];
+        
+        let email_content = r#"Subject: Test Subject
+
+<html>
+    <head>
+        <title>Test Email</title>
+        <!-- This comment should be removed -->
+    </head>
+    <body>
+        <h1>   Hello World   </h1>
+        <p>This is a test email with lots of     whitespace.</p>
+        <!-- Another comment -->
+    </body>
+</html>"#;
+        
+        let result = session.parse_email_to_mailpace_payload(email_content);
+        assert!(result.is_ok());
+        
+        let payload = result.unwrap();
+        let html_body = payload.htmlbody.unwrap();
+        
+        // Compressed HTML should be smaller than original
+        let original_html = email_content.lines().skip(2).collect::<Vec<_>>().join("\n");
+        assert!(html_body.len() < original_html.len());
+        
+        // Should still contain the essential content
+        assert!(html_body.contains("Hello World"));
+        assert!(html_body.contains("This is a test email"));
+        
+        // Comments should be removed
+        assert!(!html_body.contains("This comment should be removed"));
+        assert!(!html_body.contains("Another comment"));
+        
         assert_eq!(payload.textbody, None);
     }
 
