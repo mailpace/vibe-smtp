@@ -174,7 +174,10 @@ impl SmtpSession {
         Ok(())
     }
 
-    pub async fn handle_tls_stream(&mut self, tls_stream: Box<tokio_rustls::server::TlsStream<TcpStream>>) -> Result<()> {
+    pub async fn handle_tls_stream(
+        &mut self,
+        tls_stream: Box<tokio_rustls::server::TlsStream<TcpStream>>,
+    ) -> Result<()> {
         let mut connection = Connection::Tls(tls_stream);
         self.send_response(&mut connection, "220 vibe-gateway SMTP ready")
             .await?;

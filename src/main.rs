@@ -36,10 +36,10 @@ enum TlsMode {
 }
 
 async fn start_listener(
-    address: String, 
-    tls_mode: TlsMode, 
+    address: String,
+    tls_mode: TlsMode,
     config: ServerConfig,
-    tls_acceptor: Option<tokio_rustls::TlsAcceptor>
+    tls_acceptor: Option<tokio_rustls::TlsAcceptor>,
 ) -> Result<()> {
     let listener = TcpListener::bind(&address)
         .await
@@ -68,7 +68,8 @@ async fn start_listener(
                     if let Some(acceptor) = tls_acceptor {
                         match acceptor.accept(stream).await {
                             Ok(tls_stream) => {
-                                let mailpace_client = MailPaceClient::new(config.client, config.mailpace_endpoint);
+                                let mailpace_client =
+                                    MailPaceClient::new(config.client, config.mailpace_endpoint);
                                 let mut session = SmtpSession::new(
                                     mailpace_client,
                                     config.default_mailpace_token,
@@ -81,7 +82,10 @@ async fn start_listener(
                                 session.handle_tls_stream(Box::new(tls_stream)).await
                             }
                             Err(e) => {
-                                error!("Failed to establish implicit TLS connection for {}: {}", addr, e);
+                                error!(
+                                    "Failed to establish implicit TLS connection for {}: {}",
+                                    addr, e
+                                );
                                 return;
                             }
                         }
@@ -97,7 +101,8 @@ async fn start_listener(
                         _ => None,
                     };
 
-                    let mailpace_client = MailPaceClient::new(config.client, config.mailpace_endpoint);
+                    let mailpace_client =
+                        MailPaceClient::new(config.client, config.mailpace_endpoint);
                     let mut session = SmtpSession::new(
                         mailpace_client,
                         config.default_mailpace_token,
@@ -166,7 +171,9 @@ async fn main() -> Result<()> {
             Ok(None) => {
                 if args.docker_multi_port {
                     error!("Docker multi-port mode requires TLS configuration, but none found");
-                    return Err(anyhow::anyhow!("TLS configuration required for Docker multi-port mode"));
+                    return Err(anyhow::anyhow!(
+                        "TLS configuration required for Docker multi-port mode"
+                    ));
                 }
                 info!("TLS configuration not found, continuing without TLS");
                 None
@@ -192,10 +199,10 @@ async fn main() -> Result<()> {
 
     if args.docker_multi_port {
         info!("Starting Docker multi-port mode");
-        
+
         // Start multiple listeners
         let mut handles = vec![];
-        
+
         // Port 25 - Standard SMTP with STARTTLS
         handles.push(tokio::spawn(start_listener(
             "0.0.0.0:25".to_string(),
@@ -203,15 +210,15 @@ async fn main() -> Result<()> {
             config.clone(),
             tls_acceptor.clone(),
         )));
-        
-        // Port 587 - Message Submission with STARTTLS  
+
+        // Port 587 - Message Submission with STARTTLS
         handles.push(tokio::spawn(start_listener(
             "0.0.0.0:587".to_string(),
             TlsMode::Starttls,
             config.clone(),
             tls_acceptor.clone(),
         )));
-        
+
         // Port 2525 - Alternative SMTP with STARTTLS
         handles.push(tokio::spawn(start_listener(
             "0.0.0.0:2525".to_string(),
@@ -219,7 +226,7 @@ async fn main() -> Result<()> {
             config.clone(),
             tls_acceptor.clone(),
         )));
-        
+
         // Port 465 - SMTP over SSL (implicit TLS)
         handles.push(tokio::spawn(start_listener(
             "0.0.0.0:465".to_string(),
@@ -238,13 +245,13 @@ async fn main() -> Result<()> {
     } else {
         // Single port mode (original behavior)
         info!("Starting single-port mode");
-        
+
         let tls_mode = if args.enable_tls {
             TlsMode::Starttls
         } else {
             TlsMode::None
         };
-        
+
         start_listener(args.listen.clone(), tls_mode, config, tls_acceptor).await?;
     }
 
