@@ -37,8 +37,8 @@ WORKDIR /app
 # Copy the binary from builder stage
 COPY --from=builder /app/target/release/vibe-gateway ./
 
-# Copy TLS certificates if they exist
-COPY --from=builder /app/test_cert.pem /app/test_key.pem ./
+# Copy TLS certificates
+COPY test_cert.pem test_key.pem ./
 
 # Change ownership to non-root user
 RUN chown -R vibe-gateway:vibe-gateway /app
@@ -46,8 +46,22 @@ RUN chown -R vibe-gateway:vibe-gateway /app
 # Switch to non-root user
 USER vibe-gateway
 
-# Expose SMTP port
-EXPOSE 2525
+# Expose all SMTP ports
+# 25 - Standard SMTP with STARTTLS
+# 587 - Message Submission with STARTTLS  
+# 2525 - Alternative SMTP with STARTTLS
+# 465 - SMTP over SSL (implicit TLS)
+EXPOSE 25 587 2525 465
+
+# Set default environment variables
+ENV MAILPACE_API_TOKEN=""
+
+# Health check for the main service
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD timeout 5 bash -c '</dev/tcp/localhost/2525' || exit 1
+
+# Run the application in Docker multi-port mode
+CMD ["./vibe-gateway", "--docker-multi-port"]
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

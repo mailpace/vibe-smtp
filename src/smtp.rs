@@ -174,6 +174,65 @@ impl SmtpSession {
         Ok(())
     }
 
+    pub async fn handle_tls_stream(&mut self, tls_stream: Box<tokio_rustls::server::TlsStream<TcpStream>>) -> Result<()> {
+        let mut connection = Connection::Tls(tls_stream);
+        self.send_response(&mut connection, "220 vibe-gateway SMTP ready")
+            .await?;
+
+        loop {
+            let mut line = String::new();
+
+            // Read command from TLS stream
+            let command = match &mut connection {
+                Connection::Tls(stream) => {
+                    let mut reader = BufReader::new(stream);
+                    let bytes_read = reader.read_line(&mut line).await?;
+                    if bytes_read == 0 {
+                        break;
+                    }
+                    line.trim().to_string()
+                }
+                _ => {
+                    return Err(anyhow::anyhow!("Expected TLS connection"));
+                }
+            };
+
+            debug!("Received command: {}", command);
+
+            // STARTTLS is not supported on implicit TLS connections
+            if command.to_uppercase() == "STARTTLS" {
+                self.send_response(&mut connection, "454 TLS already active")
+                    .await?;
+                continue;
+            }
+
+            // Process command
+            match self.process_command(&command).await {
+                Ok(response) => {
+                    if let Some(resp) = response {
+                        self.send_response(&mut connection, &resp).await?;
+                    }
+                }
+                Err(e) => {
+                    error!("Error processing command '{}': {}", command, e);
+                    self.send_response(&mut connection, "451 Temporary local problem")
+                        .await?;
+                }
+            }
+
+            if self.state == SmtpState::Quit {
+                break;
+            }
+
+            // Handle DATA command specially
+            if self.state == SmtpState::Data {
+                self.handle_data_processing(&mut connection).await?;
+            }
+        }
+
+        Ok(())
+    }
+
     async fn handle_data_processing(&mut self, connection: &mut Connection) -> Result<()> {
         match self.process_email_data().await {
             Ok(_) => {

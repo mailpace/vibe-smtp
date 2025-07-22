@@ -72,12 +72,114 @@ A production-ready Rust SMTP server that accepts emails and forwards them to the
 
 ### Docker Deployment
 
+For comprehensive Docker setup with multi-port support, see **[DOCKER.md](DOCKER.md)**.
+
+#### Quick Start (Multi-Port Configuration)
+```bash
+# Clone and build
+git clone https://github.com/mailpace/vibe-smtp.git
+cd vibe-smtp
+
+# Run with all SMTP ports using the helper script
+./docker-run.sh multi-port --token your_api_token
+
+# Or use Docker Compose
+docker-compose up -d
+```
+
+#### Port Configuration
+The Docker setup supports industry-standard SMTP ports:
+
+| Port | Protocol | Description | TLS Support |
+|------|----------|-------------|-------------|
+| **25** | SMTP | Standard mail transfer | STARTTLS optional |
+| **587** | Submission | Message submission | STARTTLS optional |
+| **2525** | Alternative | Development/testing | STARTTLS optional |
+| **465** | SMTPS | SMTP over SSL | Implicit TLS (no STARTTLS) |
+
+#### Docker Run Options
+
+**Option 1: Helper Script (Recommended)**
+```bash
+# Multi-port mode with all SMTP ports
+./docker-run.sh multi-port --token your_api_token
+
+# Single-port mode (port 2525 only)
+./docker-run.sh single-port --token your_api_token
+
+# Development mode with debug logging
+./docker-run.sh multi-port --dev --token your_api_token
+```
+
+**Option 2: Docker Compose**
+```bash
+# Copy environment file and edit with your API token
+cp .env.example .env
+# Edit .env and set MAILPACE_API_TOKEN=your_token
+
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f vibe-gateway
+```
+
+**Option 3: Direct Docker Commands**
 ```bash
 # Build the image
 docker build -t vibe-gateway .
 
-# Run with environment variables
-docker run -p 2525:2525 -e MAILPACE_API_TOKEN=your_token vibe-gateway
+# Run multi-port mode
+docker run -p 25:25 -p 587:587 -p 2525:2525 -p 465:465 \
+  -e MAILPACE_API_TOKEN=your_token \
+  vibe-gateway --docker-multi-port
+
+# Run single-port mode  
+docker run -p 2525:2525 \
+  -e MAILPACE_API_TOKEN=your_token \
+  vibe-gateway --listen 0.0.0.0:2525 --enable-tls
+```
+
+#### TLS Certificate Management
+
+The Docker image includes test certificates for development. For production:
+
+**Option 1: Mount your own certificates**
+```bash
+docker run -p 25:25 -p 587:587 -p 2525:2525 -p 465:465 \
+  -v /path/to/your/cert.pem:/app/test_cert.pem:ro \
+  -v /path/to/your/key.pem:/app/test_key.pem:ro \
+  -e MAILPACE_API_TOKEN=your_token \
+  vibe-gateway --docker-multi-port
+```
+
+**Option 2: Use Docker Compose with custom certificates**
+```yaml
+# docker-compose.override.yml
+services:
+  vibe-gateway:
+    volumes:
+      - ./your_cert.pem:/app/test_cert.pem:ro
+      - ./your_key.pem:/app/test_key.pem:ro
+```
+
+#### Production Deployment Considerations
+
+1. **Security**: Use proper TLS certificates in production
+2. **Firewall**: Only expose necessary ports (typically 587 and 465)
+3. **Monitoring**: Use the built-in health check endpoint
+4. **Backup**: Ensure your MailPace API token is securely stored
+5. **Scaling**: Run multiple containers behind a load balancer if needed
+
+#### Health Checks
+
+The Docker image includes health checks that verify SMTP connectivity:
+```bash
+# Check container health
+docker inspect --format='{{.State.Health.Status}}' container_name
+
+# Manual health check
+docker exec container_name timeout 5 bash -c '</dev/tcp/localhost/2525'
 ```
 
 ## 🔧 Configuration
@@ -136,14 +238,27 @@ API tokens are available in your [MailPace Dashboard](https://app.mailpace.com) 
 
 Configure your email client or application with these settings:
 
+### Standard Configuration
+
 | Setting | Value | Notes |
 |---------|-------|-------|
 | **SMTP Server** | `localhost` | Or your server's IP address |
-| **SMTP Port** | `2525` | Default port (configurable) |
-| **Encryption** | None/STARTTLS | STARTTLS supported, not enforced |
+| **SMTP Port** | `25`, `587`, `2525`, or `465` | See port details below |
+| **Encryption** | Varies by port | See TLS configuration below |
 | **Authentication** | PLAIN or LOGIN | Standard SMTP AUTH methods |
 | **Username** | Your MailPace API token | Get from MailPace Dashboard |
 | **Password** | Your MailPace API token | Same as username |
+
+### Port-Specific Configuration
+
+| Port | Purpose | TLS Mode | Encryption | Typical Use |
+|------|---------|----------|------------|-------------|
+| **25** | Standard SMTP | STARTTLS optional | None/STARTTLS | Mail transfer agents |
+| **587** | Message Submission | STARTTLS optional | None/STARTTLS | Email clients (recommended) |
+| **2525** | Alternative SMTP | STARTTLS optional | None/STARTTLS | Development/testing |
+| **465** | SMTP over SSL | Implicit TLS | SSL/TLS required | Legacy email clients |
+
+> 💡 **Recommendation**: Use port **587** for email clients as it's the modern standard for message submission.
 
 ### Popular Email Clients
 
@@ -152,13 +267,18 @@ Configure your email client or application with these settings:
 
 ```bash
 # /etc/postfix/main.cf
-relayhost = [localhost]:2525
+# Use port 587 for message submission (recommended)
+relayhost = [localhost]:587
 smtp_sasl_auth_enable = yes
 smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
 smtp_sasl_security_options = noanonymous
+smtp_tls_security_level = may
 
 # /etc/postfix/sasl_passwd
-[localhost]:2525 your_api_token:your_api_token
+[localhost]:587 your_api_token:your_api_token
+
+# Alternative: Use port 25 for standard SMTP
+# relayhost = [localhost]:25
 ```
 </details>
 
@@ -166,9 +286,22 @@ smtp_sasl_security_options = noanonymous
 <summary><strong>Nodemailer (Node.js)</strong></summary>
 
 ```javascript
+// Recommended: Port 587 with STARTTLS
 const transporter = nodemailer.createTransporter({
   host: 'localhost',
-  port: 2525,
+  port: 587,
+  secure: false, // true for 465, false for other ports
+  auth: {
+    user: 'your_api_token',
+    pass: 'your_api_token'
+  }
+});
+
+// Alternative: Port 465 with implicit TLS
+const secureTransporter = nodemailer.createTransporter({
+  host: 'localhost',
+  port: 465,
+  secure: true, // implicit TLS
   auth: {
     user: 'your_api_token',
     pass: 'your_api_token'

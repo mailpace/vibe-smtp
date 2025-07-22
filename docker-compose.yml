@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  vibe-gateway:
+    build: .
+    ports:
+      # Standard SMTP port with STARTTLS
+      - "25:25"
+      # Message Submission port with STARTTLS  
+      - "587:587"
+      # Alternative SMTP port with STARTTLS
+      - "2525:2525"
+      # SMTP over SSL (implicit TLS)
+      - "465:465"
+    environment:
+      # Set your MailPace API token here or via .env file
+      - MAILPACE_API_TOKEN=${MAILPACE_API_TOKEN:-}
+    volumes:
+      # Mount your own TLS certificates if you have them
+      # - ./your_cert.pem:/app/test_cert.pem:ro
+      # - ./your_key.pem:/app/test_key.pem:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "timeout", "5", "bash", "-c", "</dev/tcp/localhost/2525"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - vibe-network
+
+  # Optional: Add a simple test client container
+  test-client:
+    image: python:3.11-slim
+    profiles: ["test"]
+    depends_on:
+      - vibe-gateway
+    volumes:
+      - ./test_smtp.py:/app/test_smtp.py:ro
+    working_dir: /app
+    environment:
+      - SMTP_HOST=vibe-gateway
+      - SMTP_PORT=2525
+    networks:
+      - vibe-network
+    command: ["python", "test_smtp.py"]
+
+networks:
+  vibe-network:
+    driver: bridge
+
+# Example .env file content:
+# MAILPACE_API_TOKEN=your_mailpace_api_token_here

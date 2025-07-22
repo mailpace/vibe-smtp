@@ -3,9 +3,13 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
-    /// SMTP server listen address
+    /// SMTP server listen address (single port mode)
     #[arg(short, long, default_value = "127.0.0.1:2525")]
     pub listen: String,
+
+    /// Enable multi-port Docker mode (ports 25, 587, 2525 with STARTTLS, 465 with implicit TLS)
+    #[arg(long)]
+    pub docker_multi_port: bool,
 
     /// MailPace API endpoint
     #[arg(long, default_value = "https://app.mailpace.com/api/v1/send")]
