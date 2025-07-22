@@ -7,7 +7,7 @@
   
   [![CI](https://github.com/mailpace/vibe-smtp/actions/workflows/ci.yml/badge.svg)](https://github.com/mailpace/vibe-smtp/actions/workflows/ci.yml)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-  [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
+  [![Rust](https://img.shields.io/badge/rust-1.88+-orange.svg)](https://www.rust-lang.org)
   [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://hub.docker.com)
   
   [**Website**](https://mailpace.com) • [**Documentation**](https://docs.mailpace.com) • [**API Reference**](https://docs.mailpace.com/reference/send) • [**Support**](mailto:support@mailpace.com)
@@ -49,7 +49,7 @@ A production-ready Rust SMTP server that accepts emails and forwards them to the
 ## 🚀 Quick Start
 
 ### Prerequisites
-- [Rust 1.70+](https://rustup.rs/)
+- [Rust 1.88+](https://rustup.rs/)
 - [MailPace Account](https://mailpace.com/signup) with API token
 
 ### Installation & Setup
@@ -453,7 +453,7 @@ The server provides detailed error messages back to SMTP clients:
 ## 🛠️ Development
 
 ### Prerequisites
-- [Rust 1.70+](https://rustup.rs/) with Cargo
+- [Rust 1.88+](https://rustup.rs/) with Cargo
 - [Git](https://git-scm.com/)
 - [Docker](https://docker.com/) (optional)
 
