@@ -19,7 +19,6 @@ pub enum SmtpState {
     Rcpt,
     Data,
     Quit,
-    StartTls,
 }
 
 pub struct SmtpSession {
@@ -529,7 +528,6 @@ mod tests {
         assert_eq!(SmtpState::Rcpt, SmtpState::Rcpt);
         assert_eq!(SmtpState::Data, SmtpState::Data);
         assert_eq!(SmtpState::Quit, SmtpState::Quit);
-        assert_eq!(SmtpState::StartTls, SmtpState::StartTls);
 
         assert_ne!(SmtpState::Init, SmtpState::Helo);
     }

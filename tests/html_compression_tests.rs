@@ -327,10 +327,10 @@ async fn test_large_html_compression() -> Result<()> {
         large_html.push_str(&format!(
             r#"
                 <div class="product">
-                    <!-- Product {} -->
-                    <div class="product-title">   Product {}   </div>
+                    <!-- Product {i} -->
+                    <div class="product-title">   Product {i}   </div>
                     <div class="product-description">
-                        This is the description for product number {}.
+                        This is the description for product number {i}.
                         It contains important information about the product.
                     </div>
                     <div class="price">Price: ${}.99</div>

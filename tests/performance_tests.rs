@@ -318,14 +318,6 @@ async fn test_html_compression_performance() -> Result<()> {
     let server = TestServer::new_with_html_compression().await?;
     server.mock_server.setup_success_response().await;
 
-    let transport = create_smtp_transport(
-        server.smtp_address(),
-        Some(Credentials::new(
-            "test-token".to_string(),
-            "test-token".to_string(),
-        )),
-    );
-
     // Create a moderately large HTML email for compression testing
     let html_content = generate_test_html_email(1000); // 1000 elements
 

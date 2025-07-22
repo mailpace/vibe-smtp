@@ -41,8 +41,10 @@ pub struct MailPaceResponse {
     #[serde(default)]
     pub id: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     pub status: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     pub errors: Option<Vec<String>>,
 }
 

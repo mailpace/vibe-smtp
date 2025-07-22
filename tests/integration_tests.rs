@@ -620,12 +620,11 @@ async fn test_html_compression_large_html() -> Result<()> {
         html_body.push_str(&format!(
             r#"
             <div class="item">
-                <!-- Item {} comment -->
-                <h3>   Item {}   </h3>
-                <p>   This is item number {} with extra whitespace.   </p>
+                <!-- Item {i} comment -->
+                <h3>   Item {i}   </h3>
+                <p>   This is item number {i} with extra whitespace.   </p>
             </div>
-        "#,
-            i, i, i
+        "#
         ));
     }
 
