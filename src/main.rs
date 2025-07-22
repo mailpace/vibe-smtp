@@ -43,7 +43,7 @@ async fn start_listener(
 ) -> Result<()> {
     let listener = TcpListener::bind(&address)
         .await
-        .context(format!("Failed to bind to {}", address))?;
+        .context(format!("Failed to bind to {address}"))?;
 
     let tls_mode_str = match tls_mode {
         TlsMode::None => "Plain",
