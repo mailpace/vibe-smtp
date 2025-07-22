@@ -38,6 +38,7 @@ impl MockMailPaceServer {
         self
     }
 
+    #[allow(dead_code)]
     pub async fn setup_error_response(&self, status: u16, message: &str) -> &Self {
         Mock::given(method("POST"))
             .and(path("/api/v1/send"))

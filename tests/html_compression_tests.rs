@@ -333,10 +333,9 @@ async fn test_large_html_compression() -> Result<()> {
                         This is the description for product number {i}.
                         It contains important information about the product.
                     </div>
-                    <div class="price">Price: ${}.99</div>
+                    <div class="price">Price: ${i}.99</div>
                 </div>
-        "#,
-            i, i, i, i
+        "#
         ));
     }
 
