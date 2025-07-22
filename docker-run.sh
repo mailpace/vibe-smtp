@@ -81,6 +81,19 @@ run_multi_port() {
     docker_args+=("-p" "2525:2525")
     docker_args+=("-p" "465:465")
     
+    # Add TLS certificates for multi-port mode
+    if [[ -f "test_cert.pem" && -f "test_key.pem" ]]; then
+        print_status "Using test certificates for TLS"
+        local cert_b64
+        local key_b64
+        cert_b64=$(base64 -i test_cert.pem)
+        key_b64=$(base64 -i test_key.pem)
+        docker_args+=("-e" "FULLCHAIN=$cert_b64")
+        docker_args+=("-e" "PRIVATEKEY=$key_b64")
+    else
+        print_warning "Test certificates not found. TLS may not work properly."
+    fi
+    
     if [[ -n "$token" ]]; then
         docker_args+=("-e" "MAILPACE_API_TOKEN=$token")
     elif [[ -f "$env_file" ]]; then
