@@ -74,15 +74,17 @@ mod tests {
     // Helper function to generate test certificates
     fn generate_test_cert() -> (String, String) {
         use rcgen::{Certificate, CertificateParams, DistinguishedName};
-        
+
         let mut params = CertificateParams::new(vec!["localhost".to_string()]);
         params.distinguished_name = DistinguishedName::new();
-        params.distinguished_name.push(rcgen::DnType::CommonName, "localhost");
-        
+        params
+            .distinguished_name
+            .push(rcgen::DnType::CommonName, "localhost");
+
         let cert = Certificate::from_params(params).unwrap();
         let private_key_pem = cert.serialize_private_key_pem();
         let cert_pem = cert.serialize_pem().unwrap();
-        
+
         (private_key_pem, cert_pem)
     }
 
@@ -129,7 +131,7 @@ mod tests {
     fn test_load_tls_config_with_invalid_base64_private_key() {
         let (_, cert_pem) = generate_test_cert();
         let cert_b64 = general_purpose::STANDARD.encode(&cert_pem);
-        
+
         set_tls_env_vars("invalid-base64!", &cert_b64);
 
         let result = load_tls_config();
@@ -145,7 +147,7 @@ mod tests {
     fn test_load_tls_config_with_invalid_base64_cert() {
         let (private_key_pem, _) = generate_test_cert();
         let private_key_b64 = general_purpose::STANDARD.encode(&private_key_pem);
-        
+
         set_tls_env_vars(&private_key_b64, "invalid-base64!");
 
         let result = load_tls_config();
@@ -161,7 +163,7 @@ mod tests {
     fn test_load_tls_config_with_invalid_utf8_private_key() {
         let (_, cert_pem) = generate_test_cert();
         let cert_b64 = general_purpose::STANDARD.encode(&cert_pem);
-        
+
         // Create invalid UTF-8 bytes and encode them as base64
         let invalid_utf8 = vec![0xff, 0xfe, 0xfd];
         let invalid_utf8_b64 = general_purpose::STANDARD.encode(&invalid_utf8);
@@ -181,7 +183,7 @@ mod tests {
     fn test_load_tls_config_with_invalid_utf8_cert() {
         let (private_key_pem, _) = generate_test_cert();
         let private_key_b64 = general_purpose::STANDARD.encode(&private_key_pem);
-        
+
         // Create invalid UTF-8 bytes and encode them as base64
         let invalid_utf8 = vec![0xff, 0xfe, 0xfd];
         let invalid_utf8_b64 = general_purpose::STANDARD.encode(&invalid_utf8);
@@ -201,7 +203,7 @@ mod tests {
     fn test_load_tls_config_with_invalid_certificate_format() {
         let (private_key_pem, _) = generate_test_cert();
         let private_key_b64 = general_purpose::STANDARD.encode(&private_key_pem);
-        
+
         // Create an invalid but PEM-formatted certificate
         let invalid_cert = r#"-----BEGIN CERTIFICATE-----
 INVALID_CERTIFICATE_DATA_HERE
@@ -274,7 +276,7 @@ INVALID_CERTIFICATE_DATA_HERE
     fn test_load_tls_config_with_only_private_key_env_var() {
         let (private_key_pem, _) = generate_test_cert();
         let private_key_b64 = general_purpose::STANDARD.encode(&private_key_pem);
-        
+
         clear_tls_env_vars();
         env::set_var("PRIVATEKEY", private_key_b64);
         // FULLCHAIN is not set
@@ -291,7 +293,7 @@ INVALID_CERTIFICATE_DATA_HERE
     fn test_load_tls_config_with_only_cert_env_var() {
         let (_, cert_pem) = generate_test_cert();
         let cert_b64 = general_purpose::STANDARD.encode(&cert_pem);
-        
+
         clear_tls_env_vars();
         env::set_var("FULLCHAIN", cert_b64);
         // PRIVATEKEY is not set
@@ -308,7 +310,7 @@ INVALID_CERTIFICATE_DATA_HERE
     fn test_generated_certificates_are_valid() {
         // Test that the generated certificates are valid by themselves
         let (private_key_pem, cert_pem) = generate_test_cert();
-        
+
         let mut cert_reader = std::io::Cursor::new(cert_pem.as_bytes());
         let cert_result = certs(&mut cert_reader);
         assert!(cert_result.is_ok());
@@ -325,7 +327,7 @@ INVALID_CERTIFICATE_DATA_HERE
         // Generate one set of certs and create a different private key to test mismatch scenario
         let (_, cert_pem) = generate_test_cert();
         let (different_private_key, _) = generate_test_cert(); // Generate different cert/key pair
-        
+
         let private_key_b64 = general_purpose::STANDARD.encode(different_private_key);
         let cert_b64 = general_purpose::STANDARD.encode(&cert_pem);
 
@@ -339,7 +341,7 @@ INVALID_CERTIFICATE_DATA_HERE
                 // Some TLS libraries may allow mismatched cert/key for testing
             }
             Err(_) => {
-                // Some TLS libraries may reject mismatched cert/key  
+                // Some TLS libraries may reject mismatched cert/key
             }
         }
 

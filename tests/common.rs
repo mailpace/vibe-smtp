@@ -105,7 +105,7 @@ impl TestServer {
                 // Fallback to cargo run if binary doesn't exist
                 let mut cargo_args = vec!["run", "--release", "--"];
                 cargo_args.extend(&base_args);
-                
+
                 Command::new("cargo")
                     .args(&cargo_args)
                     .env("MAILPACE_API_TOKEN", "test-token")

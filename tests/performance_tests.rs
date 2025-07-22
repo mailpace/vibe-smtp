@@ -365,7 +365,10 @@ async fn test_html_compression_performance() -> Result<()> {
         .filter(|send_result| send_result.is_ok())
         .count();
 
-    assert_eq!(successful_sends, num_emails, "All HTML emails should be sent successfully");
+    assert_eq!(
+        successful_sends, num_emails,
+        "All HTML emails should be sent successfully"
+    );
 
     let throughput = num_emails as f64 / duration.as_secs_f64();
     println!("HTML compression performance: {num_emails} emails in {duration:?} ({throughput:.2} emails/second)");
@@ -383,7 +386,10 @@ async fn test_html_compression_performance() -> Result<()> {
 async fn test_compression_vs_no_compression_performance() -> Result<()> {
     // Test with compression enabled
     let server_with_compression = TestServer::new_with_html_compression().await?;
-    server_with_compression.mock_server.setup_success_response().await;
+    server_with_compression
+        .mock_server
+        .setup_success_response()
+        .await;
 
     let html_content = generate_test_html_email(500);
     let num_emails = 10;
@@ -393,7 +399,10 @@ async fn test_compression_vs_no_compression_performance() -> Result<()> {
     let tasks_with_compression = (0..num_emails).map(|i| {
         let transport = create_smtp_transport(
             server_with_compression.smtp_address(),
-            Some(Credentials::new("test-token".to_string(), "test-token".to_string())),
+            Some(Credentials::new(
+                "test-token".to_string(),
+                "test-token".to_string(),
+            )),
         );
         let html_content = html_content.clone();
 
@@ -418,13 +427,19 @@ async fn test_compression_vs_no_compression_performance() -> Result<()> {
 
     // Test without compression
     let server_without_compression = TestServer::new().await?;
-    server_without_compression.mock_server.setup_success_response().await;
+    server_without_compression
+        .mock_server
+        .setup_success_response()
+        .await;
 
     let start_time = Instant::now();
     let tasks_without_compression = (0..num_emails).map(|i| {
         let transport = create_smtp_transport(
             server_without_compression.smtp_address(),
-            Some(Credentials::new("test-token".to_string(), "test-token".to_string())),
+            Some(Credentials::new(
+                "test-token".to_string(),
+                "test-token".to_string(),
+            )),
         );
         let html_content = html_content.clone();
 
@@ -447,7 +462,8 @@ async fn test_compression_vs_no_compression_performance() -> Result<()> {
     println!("Without compression: {duration_without_compression:?}");
 
     // Compression shouldn't add more than 50% overhead
-    let overhead_ratio = duration_with_compression.as_secs_f64() / duration_without_compression.as_secs_f64();
+    let overhead_ratio =
+        duration_with_compression.as_secs_f64() / duration_without_compression.as_secs_f64();
     assert!(
         overhead_ratio < 1.5,
         "HTML compression adds too much overhead: {overhead_ratio:.2}x"
@@ -471,9 +487,9 @@ async fn test_large_html_compression_performance() -> Result<()> {
 
     // Generate very large HTML content
     let large_html = generate_test_html_email(5000); // 5000 elements - very large
-    
+
     let start_time = Instant::now();
-    
+
     let email = Message::builder()
         .from("large-test@example.com".parse()?)
         .to("recipient@example.com".parse()?)
@@ -483,10 +499,13 @@ async fn test_large_html_compression_performance() -> Result<()> {
     let result = transport.send(&email);
     let duration = start_time.elapsed();
 
-    assert!(result.is_ok(), "Large HTML email should be sent successfully");
-    
+    assert!(
+        result.is_ok(),
+        "Large HTML email should be sent successfully"
+    );
+
     println!("Large HTML compression: {duration:?}");
-    
+
     // Even large HTML should be processed reasonably quickly
     assert!(
         duration < Duration::from_secs(30),
@@ -498,7 +517,8 @@ async fn test_large_html_compression_performance() -> Result<()> {
 
 /// Helper function to generate test HTML content of varying sizes
 fn generate_test_html_email(num_elements: usize) -> String {
-    let mut html = String::from(r#"
+    let mut html = String::from(
+        r#"
     <!DOCTYPE html>
     <html>
         <head>
@@ -534,11 +554,13 @@ fn generate_test_html_email(num_elements: usize) -> String {
         <body>
             <h1>   Performance Test Email   </h1>
             <div class="content">
-    "#);
+    "#,
+    );
 
     // Add many HTML elements to test compression performance
     for i in 0..num_elements {
-        html.push_str(&format!(r#"
+        html.push_str(&format!(
+            r#"
                 <div class="item">
                     <!-- Item {} comment with extra whitespace -->
                     <h3>   Item Number {}   </h3>
@@ -551,21 +573,31 @@ fn generate_test_html_email(num_elements: usize) -> String {
                         <small>Created: 2024-07-{:02}</small>
                     </div>
                 </div>
-        "#, i, i, i, (i % 30) + 1));
+        "#,
+            i,
+            i,
+            i,
+            (i % 30) + 1
+        ));
 
         // Add some variety every 50 items
         if i % 50 == 0 {
-            html.push_str(&format!(r#"
+            html.push_str(&format!(
+                r#"
                 <div class="separator">
                     <!-- Section {} -->
                     <hr style="  margin:   20px   0  ">
                     <h2>   Section {}   </h2>
                 </div>
-            "#, i / 50, i / 50));
+            "#,
+                i / 50,
+                i / 50
+            ));
         }
     }
 
-    html.push_str(r#"
+    html.push_str(
+        r#"
             </div>
             <footer style="  margin-top:   30px;   text-align:   center  ">
                 <!-- Footer with lots of whitespace -->
@@ -573,7 +605,8 @@ fn generate_test_html_email(num_elements: usize) -> String {
             </footer>
         </body>
     </html>
-    "#);
+    "#,
+    );
 
     html
 }

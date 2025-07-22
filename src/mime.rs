@@ -328,7 +328,9 @@ mod tests {
 
     #[test]
     fn test_mime_header_parse_with_params() {
-        let header = MimeHeader::parse("Content-Type: text/plain; charset=utf-8; boundary=\"test123\"").unwrap();
+        let header =
+            MimeHeader::parse("Content-Type: text/plain; charset=utf-8; boundary=\"test123\"")
+                .unwrap();
         assert_eq!(header.name, "content-type");
         assert_eq!(header.value, "text/plain");
         assert_eq!(header.params.get("charset"), Some(&"utf-8".to_string()));
@@ -385,8 +387,10 @@ mod tests {
     #[test]
     fn test_mime_part_is_attachment_true() {
         let mut part = MimePart::new();
-        let header = MimeHeader::parse("Content-Disposition: attachment; filename=\"test.txt\"").unwrap();
-        part.headers.insert("content-disposition".to_string(), header);
+        let header =
+            MimeHeader::parse("Content-Disposition: attachment; filename=\"test.txt\"").unwrap();
+        part.headers
+            .insert("content-disposition".to_string(), header);
 
         assert!(part.is_attachment());
     }
@@ -395,7 +399,8 @@ mod tests {
     fn test_mime_part_is_attachment_false() {
         let mut part = MimePart::new();
         let header = MimeHeader::parse("Content-Disposition: inline").unwrap();
-        part.headers.insert("content-disposition".to_string(), header);
+        part.headers
+            .insert("content-disposition".to_string(), header);
 
         assert!(!part.is_attachment());
     }
@@ -409,8 +414,10 @@ mod tests {
     #[test]
     fn test_mime_part_get_filename_from_disposition() {
         let mut part = MimePart::new();
-        let header = MimeHeader::parse("Content-Disposition: attachment; filename=\"test.txt\"").unwrap();
-        part.headers.insert("content-disposition".to_string(), header);
+        let header =
+            MimeHeader::parse("Content-Disposition: attachment; filename=\"test.txt\"").unwrap();
+        part.headers
+            .insert("content-disposition".to_string(), header);
 
         assert_eq!(part.get_filename(), Some("test.txt".to_string()));
     }
@@ -448,16 +455,20 @@ mod tests {
     #[test]
     fn test_mime_part_to_attachment_base64() {
         let mut part = MimePart::new();
-        
-        let disposition_header = MimeHeader::parse("Content-Disposition: attachment; filename=\"test.txt\"").unwrap();
-        part.headers.insert("content-disposition".to_string(), disposition_header);
-        
+
+        let disposition_header =
+            MimeHeader::parse("Content-Disposition: attachment; filename=\"test.txt\"").unwrap();
+        part.headers
+            .insert("content-disposition".to_string(), disposition_header);
+
         let content_type_header = MimeHeader::parse("Content-Type: text/plain").unwrap();
-        part.headers.insert("content-type".to_string(), content_type_header);
-        
+        part.headers
+            .insert("content-type".to_string(), content_type_header);
+
         let encoding_header = MimeHeader::parse("Content-Transfer-Encoding: base64").unwrap();
-        part.headers.insert("content-transfer-encoding".to_string(), encoding_header);
-        
+        part.headers
+            .insert("content-transfer-encoding".to_string(), encoding_header);
+
         part.body = "SGVsbG8gV29ybGQ=".as_bytes().to_vec(); // "Hello World" in base64
 
         let attachment = part.to_attachment().unwrap();
@@ -470,29 +481,36 @@ mod tests {
     #[test]
     fn test_mime_part_to_attachment_plain() {
         let mut part = MimePart::new();
-        
-        let disposition_header = MimeHeader::parse("Content-Disposition: attachment; filename=\"test.txt\"").unwrap();
-        part.headers.insert("content-disposition".to_string(), disposition_header);
-        
+
+        let disposition_header =
+            MimeHeader::parse("Content-Disposition: attachment; filename=\"test.txt\"").unwrap();
+        part.headers
+            .insert("content-disposition".to_string(), disposition_header);
+
         let content_type_header = MimeHeader::parse("Content-Type: text/plain").unwrap();
-        part.headers.insert("content-type".to_string(), content_type_header);
-        
+        part.headers
+            .insert("content-type".to_string(), content_type_header);
+
         part.body = "Hello World".as_bytes().to_vec();
 
         let attachment = part.to_attachment().unwrap();
         assert_eq!(attachment.name, "test.txt");
         assert_eq!(attachment.content_type, "text/plain");
-        assert_eq!(attachment.content, general_purpose::STANDARD.encode("Hello World"));
+        assert_eq!(
+            attachment.content,
+            general_purpose::STANDARD.encode("Hello World")
+        );
         assert_eq!(attachment.cid, None);
     }
 
     #[test]
     fn test_mime_part_to_attachment_no_filename() {
         let mut part = MimePart::new();
-        
+
         let content_type_header = MimeHeader::parse("Content-Type: text/plain").unwrap();
-        part.headers.insert("content-type".to_string(), content_type_header);
-        
+        part.headers
+            .insert("content-type".to_string(), content_type_header);
+
         part.body = "Hello World".as_bytes().to_vec();
 
         let attachment = part.to_attachment().unwrap();
@@ -511,9 +529,9 @@ mod tests {
     fn test_mime_parser_parse_simple_email() {
         let parser = MimeParser::new(1024, 10);
         let email = "From: test@example.com\nTo: user@example.com\nSubject: Test\n\nHello World";
-        
+
         let (headers, body, attachments) = parser.parse_email(email).unwrap();
-        
+
         assert_eq!(headers.get("from"), Some(&"test@example.com".to_string()));
         assert_eq!(headers.get("to"), Some(&"user@example.com".to_string()));
         assert_eq!(headers.get("subject"), Some(&"Test".to_string()));
@@ -524,12 +542,18 @@ mod tests {
     #[test]
     fn test_mime_parser_extract_boundary() {
         let parser = MimeParser::new(1024, 10);
-        
+
         let content_type = "multipart/mixed; boundary=boundary123";
-        assert_eq!(parser.extract_boundary(content_type).unwrap(), "boundary123");
-        
+        assert_eq!(
+            parser.extract_boundary(content_type).unwrap(),
+            "boundary123"
+        );
+
         let content_type_quoted = "multipart/mixed; boundary=\"boundary123\"";
-        assert_eq!(parser.extract_boundary(content_type_quoted).unwrap(), "boundary123");
+        assert_eq!(
+            parser.extract_boundary(content_type_quoted).unwrap(),
+            "boundary123"
+        );
     }
 
     #[test]
@@ -560,7 +584,7 @@ File content here
 --boundary123--"#;
 
         let (headers, body, attachments) = parser.parse_email(email).unwrap();
-        
+
         assert_eq!(headers.get("from"), Some(&"test@example.com".to_string()));
         assert_eq!(body, "Hello World");
         assert_eq!(attachments.len(), 1);
@@ -584,7 +608,7 @@ Second part
 --boundary123--"#;
 
         let (_, body, attachments) = parser.parse_email(email).unwrap();
-        
+
         assert!(body.contains("First part"));
         assert!(body.contains("Second part"));
         assert_eq!(attachments.len(), 0);
@@ -637,10 +661,13 @@ Content-Disposition: attachment; filename="test.txt"
 This is the file content"#;
 
         let part = parser.parse_mime_part(part_content).unwrap();
-        
+
         assert!(part.get_header("content-type").is_some());
         assert!(part.get_header("content-disposition").is_some());
-        assert_eq!(String::from_utf8_lossy(&part.body), "This is the file content");
+        assert_eq!(
+            String::from_utf8_lossy(&part.body),
+            "This is the file content"
+        );
     }
 
     #[test]
@@ -649,9 +676,12 @@ This is the file content"#;
         let part_content = "Just content, no headers";
 
         let part = parser.parse_mime_part(part_content).unwrap();
-        
+
         assert_eq!(part.headers.len(), 0);
-        assert_eq!(String::from_utf8_lossy(&part.body), "Just content, no headers");
+        assert_eq!(
+            String::from_utf8_lossy(&part.body),
+            "Just content, no headers"
+        );
     }
 
     #[test]
@@ -662,14 +692,18 @@ This is the file content"#;
 Body content after empty line"#;
 
         let part = parser.parse_mime_part(part_content).unwrap();
-        
+
         assert!(part.get_header("content-type").is_some());
-        assert_eq!(String::from_utf8_lossy(&part.body), "Body content after empty line");
+        assert_eq!(
+            String::from_utf8_lossy(&part.body),
+            "Body content after empty line"
+        );
     }
 
     #[test]
     fn test_mime_header_parse_with_whitespace() {
-        let header = MimeHeader::parse("  Content-Type  :  text/plain  ; charset = utf-8  ").unwrap();
+        let header =
+            MimeHeader::parse("  Content-Type  :  text/plain  ; charset = utf-8  ").unwrap();
         assert_eq!(header.name, "content-type");
         assert_eq!(header.value, "text/plain");
         assert_eq!(header.params.get("charset"), Some(&"utf-8".to_string()));
@@ -678,10 +712,11 @@ Body content after empty line"#;
     #[test]
     fn test_mime_part_base64_content_with_whitespace() {
         let mut part = MimePart::new();
-        
+
         let encoding_header = MimeHeader::parse("Content-Transfer-Encoding: base64").unwrap();
-        part.headers.insert("content-transfer-encoding".to_string(), encoding_header);
-        
+        part.headers
+            .insert("content-transfer-encoding".to_string(), encoding_header);
+
         // Base64 content with whitespace (newlines, spaces)
         part.body = "SGVs\nbG8g\r\n V29y\nbGQ=".as_bytes().to_vec();
 
@@ -693,7 +728,7 @@ Body content after empty line"#;
     #[test]
     fn test_mime_parser_boundary_variations() {
         let parser = MimeParser::new(1024, 10);
-        
+
         // Test with different boundary styles
         let boundary_tests = vec![
             "multipart/mixed; boundary=simple",
@@ -704,7 +739,11 @@ Body content after empty line"#;
 
         for content_type in boundary_tests {
             let result = parser.extract_boundary(content_type);
-            assert!(result.is_ok(), "Failed to parse boundary from: {}", content_type);
+            assert!(
+                result.is_ok(),
+                "Failed to parse boundary from: {}",
+                content_type
+            );
         }
     }
 }

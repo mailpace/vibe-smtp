@@ -6,10 +6,10 @@ use tokio::net::TcpStream;
 use tokio_rustls::TlsAcceptor;
 use tracing::{debug, error, info, warn};
 
+use crate::compression::HtmlCompressor;
 use crate::connection::Connection;
 use crate::mailpace::{MailPaceClient, MailPacePayload};
 use crate::mime::MimeParser;
-use crate::compression::HtmlCompressor;
 
 #[derive(Debug, PartialEq)]
 pub enum SmtpState {
@@ -480,7 +480,8 @@ mod tests {
 
     fn create_test_session() -> SmtpSession {
         let client = Client::new();
-        let mailpace_client = MailPaceClient::new(client, "https://api.mailpace.com/v1/send".to_string());
+        let mailpace_client =
+            MailPaceClient::new(client, "https://api.mailpace.com/v1/send".to_string());
         SmtpSession::new(
             mailpace_client,
             Some("test-token".to_string()),
@@ -494,7 +495,8 @@ mod tests {
 
     fn create_test_session_with_attachments() -> SmtpSession {
         let client = Client::new();
-        let mailpace_client = MailPaceClient::new(client, "https://api.mailpace.com/v1/send".to_string());
+        let mailpace_client =
+            MailPaceClient::new(client, "https://api.mailpace.com/v1/send".to_string());
         SmtpSession::new(
             mailpace_client,
             Some("test-token".to_string()),
@@ -508,7 +510,8 @@ mod tests {
 
     fn create_test_session_with_html_compression() -> SmtpSession {
         let client = Client::new();
-        let mailpace_client = MailPaceClient::new(client, "https://api.mailpace.com/v1/send".to_string());
+        let mailpace_client =
+            MailPaceClient::new(client, "https://api.mailpace.com/v1/send".to_string());
         SmtpSession::new(
             mailpace_client,
             Some("test-token".to_string()),
@@ -529,7 +532,7 @@ mod tests {
         assert_eq!(SmtpState::Data, SmtpState::Data);
         assert_eq!(SmtpState::Quit, SmtpState::Quit);
         assert_eq!(SmtpState::StartTls, SmtpState::StartTls);
-        
+
         assert_ne!(SmtpState::Init, SmtpState::Helo);
     }
 
@@ -559,7 +562,7 @@ mod tests {
         let session = create_test_session_with_html_compression();
         assert_eq!(session.enable_html_compression, true);
         assert!(session.html_compressor.is_some());
-        
+
         let session_no_compression = create_test_session();
         assert_eq!(session_no_compression.enable_html_compression, false);
         assert!(session_no_compression.html_compressor.is_none());
@@ -568,7 +571,7 @@ mod tests {
     #[tokio::test]
     async fn test_process_command_helo() {
         let mut session = create_test_session();
-        
+
         let result = session.process_command("HELO example.com").await.unwrap();
         assert_eq!(result, Some("250 vibe-gateway".to_string()));
         assert_eq!(session.state, SmtpState::Helo);
@@ -578,7 +581,7 @@ mod tests {
     #[tokio::test]
     async fn test_process_command_ehlo() {
         let mut session = create_test_session();
-        
+
         let result = session.process_command("EHLO example.com").await.unwrap();
         assert!(result.is_some());
         let response = result.unwrap();
@@ -592,7 +595,7 @@ mod tests {
     #[tokio::test]
     async fn test_process_command_ehlo_with_attachments() {
         let mut session = create_test_session_with_attachments();
-        
+
         let result = session.process_command("EHLO example.com").await.unwrap();
         assert!(result.is_some());
         let response = result.unwrap();
@@ -603,7 +606,7 @@ mod tests {
     #[tokio::test]
     async fn test_process_command_helo_no_domain() {
         let mut session = create_test_session();
-        
+
         let result = session.process_command("HELO").await.unwrap();
         assert_eq!(result, Some("501 Syntax error in parameters".to_string()));
         assert_eq!(session.state, SmtpState::Init);
@@ -612,12 +615,12 @@ mod tests {
     #[tokio::test]
     async fn test_process_command_auth_plain() {
         let mut session = create_test_session();
-        
+
         // Test AUTH PLAIN with base64 encoded credentials
         let auth_string = "\0testuser\0testpass";
         let encoded = base64::engine::general_purpose::STANDARD.encode(auth_string);
         let command = format!("AUTH PLAIN {}", encoded);
-        
+
         let result = session.process_command(&command).await.unwrap();
         assert_eq!(result, Some("235 Authentication successful".to_string()));
         assert_eq!(session.auth_token, Some("testuser".to_string()));
@@ -626,7 +629,7 @@ mod tests {
     #[tokio::test]
     async fn test_process_command_auth_plain_multipart() {
         let mut session = create_test_session();
-        
+
         let result = session.process_command("AUTH PLAIN").await.unwrap();
         assert_eq!(result, Some("334 ".to_string()));
     }
@@ -634,7 +637,7 @@ mod tests {
     #[tokio::test]
     async fn test_process_command_auth_login() {
         let mut session = create_test_session();
-        
+
         let result = session.process_command("AUTH LOGIN").await.unwrap();
         assert_eq!(result, Some("334 VXNlcm5hbWU6".to_string()));
     }
@@ -642,15 +645,18 @@ mod tests {
     #[tokio::test]
     async fn test_process_command_auth_unsupported() {
         let mut session = create_test_session();
-        
+
         let result = session.process_command("AUTH DIGEST-MD5").await.unwrap();
-        assert_eq!(result, Some("504 Unrecognized authentication type".to_string()));
+        assert_eq!(
+            result,
+            Some("504 Unrecognized authentication type".to_string())
+        );
     }
 
     #[tokio::test]
     async fn test_process_command_auth_no_params() {
         let mut session = create_test_session();
-        
+
         let result = session.process_command("AUTH").await.unwrap();
         assert_eq!(result, Some("501 Syntax error in parameters".to_string()));
     }
@@ -658,8 +664,11 @@ mod tests {
     #[tokio::test]
     async fn test_process_command_mail_from() {
         let mut session = create_test_session();
-        
-        let result = session.process_command("MAIL FROM:<test@example.com>").await.unwrap();
+
+        let result = session
+            .process_command("MAIL FROM:<test@example.com>")
+            .await
+            .unwrap();
         assert_eq!(result, Some("250 OK".to_string()));
         assert_eq!(session.state, SmtpState::Mail);
         assert_eq!(session.mail_from, Some("test@example.com".to_string()));
@@ -668,8 +677,11 @@ mod tests {
     #[tokio::test]
     async fn test_process_command_mail_from_no_brackets() {
         let mut session = create_test_session();
-        
-        let result = session.process_command("MAIL FROM: test@example.com").await.unwrap();
+
+        let result = session
+            .process_command("MAIL FROM: test@example.com")
+            .await
+            .unwrap();
         assert_eq!(result, Some("250 OK".to_string()));
         assert_eq!(session.mail_from, Some("test@example.com".to_string()));
     }
@@ -677,16 +689,22 @@ mod tests {
     #[tokio::test]
     async fn test_process_command_mail_invalid() {
         let mut session = create_test_session();
-        
-        let result = session.process_command("MAIL TO:test@example.com").await.unwrap();
+
+        let result = session
+            .process_command("MAIL TO:test@example.com")
+            .await
+            .unwrap();
         assert_eq!(result, Some("501 Syntax error in parameters".to_string()));
     }
 
     #[tokio::test]
     async fn test_process_command_rcpt_to() {
         let mut session = create_test_session();
-        
-        let result = session.process_command("RCPT TO:<recipient@example.com>").await.unwrap();
+
+        let result = session
+            .process_command("RCPT TO:<recipient@example.com>")
+            .await
+            .unwrap();
         assert_eq!(result, Some("250 OK".to_string()));
         assert_eq!(session.state, SmtpState::Rcpt);
         assert_eq!(session.rcpt_to, vec!["recipient@example.com"]);
@@ -695,19 +713,31 @@ mod tests {
     #[tokio::test]
     async fn test_process_command_rcpt_to_multiple() {
         let mut session = create_test_session();
-        
-        let _ = session.process_command("RCPT TO:<recipient1@example.com>").await.unwrap();
-        let result = session.process_command("RCPT TO:<recipient2@example.com>").await.unwrap();
-        
+
+        let _ = session
+            .process_command("RCPT TO:<recipient1@example.com>")
+            .await
+            .unwrap();
+        let result = session
+            .process_command("RCPT TO:<recipient2@example.com>")
+            .await
+            .unwrap();
+
         assert_eq!(result, Some("250 OK".to_string()));
-        assert_eq!(session.rcpt_to, vec!["recipient1@example.com", "recipient2@example.com"]);
+        assert_eq!(
+            session.rcpt_to,
+            vec!["recipient1@example.com", "recipient2@example.com"]
+        );
     }
 
     #[tokio::test]
     async fn test_process_command_rcpt_invalid() {
         let mut session = create_test_session();
-        
-        let result = session.process_command("RCPT FROM:test@example.com").await.unwrap();
+
+        let result = session
+            .process_command("RCPT FROM:test@example.com")
+            .await
+            .unwrap();
         assert_eq!(result, Some("501 Syntax error in parameters".to_string()));
     }
 
@@ -716,9 +746,12 @@ mod tests {
         let mut session = create_test_session();
         session.mail_from = Some("sender@example.com".to_string());
         session.rcpt_to.push("recipient@example.com".to_string());
-        
+
         let result = session.process_command("DATA").await.unwrap();
-        assert_eq!(result, Some("354 End data with <CR><LF>.<CR><LF>".to_string()));
+        assert_eq!(
+            result,
+            Some("354 End data with <CR><LF>.<CR><LF>".to_string())
+        );
         assert_eq!(session.state, SmtpState::Data);
     }
 
@@ -726,7 +759,7 @@ mod tests {
     async fn test_process_command_data_no_sender() {
         let mut session = create_test_session();
         session.rcpt_to.push("recipient@example.com".to_string());
-        
+
         let result = session.process_command("DATA").await.unwrap();
         assert_eq!(result, Some("503 Bad sequence of commands".to_string()));
     }
@@ -735,7 +768,7 @@ mod tests {
     async fn test_process_command_data_no_recipients() {
         let mut session = create_test_session();
         session.mail_from = Some("sender@example.com".to_string());
-        
+
         let result = session.process_command("DATA").await.unwrap();
         assert_eq!(result, Some("503 Bad sequence of commands".to_string()));
     }
@@ -747,7 +780,7 @@ mod tests {
         session.rcpt_to.push("recipient@example.com".to_string());
         session.data = b"test data".to_vec();
         session.state = SmtpState::Data;
-        
+
         let result = session.process_command("RSET").await.unwrap();
         assert_eq!(result, Some("250 OK".to_string()));
         assert_eq!(session.state, SmtpState::Helo);
@@ -759,7 +792,7 @@ mod tests {
     #[tokio::test]
     async fn test_process_command_noop() {
         let mut session = create_test_session();
-        
+
         let result = session.process_command("NOOP").await.unwrap();
         assert_eq!(result, Some("250 OK".to_string()));
     }
@@ -767,7 +800,7 @@ mod tests {
     #[tokio::test]
     async fn test_process_command_quit() {
         let mut session = create_test_session();
-        
+
         let result = session.process_command("QUIT").await.unwrap();
         assert_eq!(result, Some("221 Goodbye".to_string()));
         assert_eq!(session.state, SmtpState::Quit);
@@ -776,7 +809,7 @@ mod tests {
     #[tokio::test]
     async fn test_process_command_unknown() {
         let mut session = create_test_session();
-        
+
         let result = session.process_command("UNKNOWN").await.unwrap();
         assert_eq!(result, Some("502 Command not implemented".to_string()));
     }
@@ -784,7 +817,7 @@ mod tests {
     #[tokio::test]
     async fn test_process_command_empty() {
         let mut session = create_test_session();
-        
+
         let result = session.process_command("").await.unwrap();
         assert_eq!(result, None);
     }
@@ -792,14 +825,14 @@ mod tests {
     #[tokio::test]
     async fn test_read_data() {
         let mut session = create_test_session();
-        
+
         let data = "Subject: Test\r\n\r\nThis is the body\r\n.\r\n";
         let mock = Builder::new().read(data.as_bytes()).build();
         let mut reader = BufReader::new(mock);
-        
+
         let result = session.read_data(&mut reader).await;
         assert!(result.is_ok());
-        
+
         let data_str = String::from_utf8(session.data.clone()).unwrap();
         assert!(data_str.contains("Subject: Test"));
         assert!(data_str.contains("This is the body"));
@@ -809,14 +842,14 @@ mod tests {
     #[tokio::test]
     async fn test_read_data_with_dot_stuffing() {
         let mut session = create_test_session();
-        
+
         let data = "Subject: Test\r\n\r\n..This line starts with two dots\r\n.\r\n";
         let mock = Builder::new().read(data.as_bytes()).build();
         let mut reader = BufReader::new(mock);
-        
+
         let result = session.read_data(&mut reader).await;
         assert!(result.is_ok());
-        
+
         let data_str = String::from_utf8(session.data.clone()).unwrap();
         assert!(data_str.contains(".This line starts with two dots"));
     }
@@ -826,12 +859,13 @@ mod tests {
         let mut session = create_test_session();
         session.mail_from = Some("sender@example.com".to_string());
         session.rcpt_to = vec!["recipient@example.com".to_string()];
-        
-        let email_content = "Subject: Test Subject\r\nFrom: sender@example.com\r\n\r\nTest body content";
-        
+
+        let email_content =
+            "Subject: Test Subject\r\nFrom: sender@example.com\r\n\r\nTest body content";
+
         let result = session.parse_email_to_mailpace_payload(email_content);
         assert!(result.is_ok());
-        
+
         let payload = result.unwrap();
         assert_eq!(payload.from, "sender@example.com");
         assert_eq!(payload.to, "recipient@example.com");
@@ -845,14 +879,18 @@ mod tests {
         let mut session = create_test_session();
         session.mail_from = Some("sender@example.com".to_string());
         session.rcpt_to = vec!["recipient@example.com".to_string()];
-        
-        let email_content = "Subject: Test Subject\r\n\r\n<html><body>Test HTML content</body></html>";
-        
+
+        let email_content =
+            "Subject: Test Subject\r\n\r\n<html><body>Test HTML content</body></html>";
+
         let result = session.parse_email_to_mailpace_payload(email_content);
         assert!(result.is_ok());
-        
+
         let payload = result.unwrap();
-        assert_eq!(payload.htmlbody, Some("<html><body>Test HTML content</body></html>".to_string()));
+        assert_eq!(
+            payload.htmlbody,
+            Some("<html><body>Test HTML content</body></html>".to_string())
+        );
         assert_eq!(payload.textbody, None);
     }
 
@@ -861,7 +899,7 @@ mod tests {
         let mut session = create_test_session_with_html_compression();
         session.mail_from = Some("sender@example.com".to_string());
         session.rcpt_to = vec!["recipient@example.com".to_string()];
-        
+
         let email_content = r#"Subject: Test Subject
 
 <html>
@@ -875,25 +913,25 @@ mod tests {
         <!-- Another comment -->
     </body>
 </html>"#;
-        
+
         let result = session.parse_email_to_mailpace_payload(email_content);
         assert!(result.is_ok());
-        
+
         let payload = result.unwrap();
         let html_body = payload.htmlbody.unwrap();
-        
+
         // Compressed HTML should be smaller than original
         let original_html = email_content.lines().skip(2).collect::<Vec<_>>().join("\n");
         assert!(html_body.len() < original_html.len());
-        
+
         // Should still contain the essential content
         assert!(html_body.contains("Hello World"));
         assert!(html_body.contains("This is a test email"));
-        
+
         // Comments should be removed
         assert!(!html_body.contains("This comment should be removed"));
         assert!(!html_body.contains("Another comment"));
-        
+
         assert_eq!(payload.textbody, None);
     }
 
@@ -901,13 +939,16 @@ mod tests {
     fn test_parse_email_to_mailpace_payload_multiple_recipients() {
         let mut session = create_test_session();
         session.mail_from = Some("sender@example.com".to_string());
-        session.rcpt_to = vec!["recipient1@example.com".to_string(), "recipient2@example.com".to_string()];
-        
+        session.rcpt_to = vec![
+            "recipient1@example.com".to_string(),
+            "recipient2@example.com".to_string(),
+        ];
+
         let email_content = "Subject: Test Subject\r\n\r\nTest body";
-        
+
         let result = session.parse_email_to_mailpace_payload(email_content);
         assert!(result.is_ok());
-        
+
         let payload = result.unwrap();
         assert_eq!(payload.to, "recipient1@example.com, recipient2@example.com");
     }
@@ -917,30 +958,36 @@ mod tests {
         let mut session = create_test_session();
         session.mail_from = Some("sender@example.com".to_string());
         session.rcpt_to = vec!["recipient@example.com".to_string()];
-        
+
         let email_content = "Subject: Test Subject\r\nCc: cc@example.com\r\nBcc: bcc@example.com\r\nReply-To: reply@example.com\r\nX-MailPace-Tags: tag1,tag2\r\n\r\nTest body";
-        
+
         let result = session.parse_email_to_mailpace_payload(email_content);
         assert!(result.is_ok());
-        
+
         let payload = result.unwrap();
         assert_eq!(payload.subject, Some("Test Subject".to_string()));
         assert_eq!(payload.cc, Some("cc@example.com".to_string()));
         assert_eq!(payload.bcc, Some("bcc@example.com".to_string()));
         assert_eq!(payload.replyto, Some("reply@example.com".to_string()));
-        assert_eq!(payload.tags, Some(vec!["tag1".to_string(), "tag2".to_string()]));
+        assert_eq!(
+            payload.tags,
+            Some(vec!["tag1".to_string(), "tag2".to_string()])
+        );
     }
 
     #[test]
     fn test_parse_email_to_mailpace_payload_no_sender() {
         let mut session = create_test_session();
         session.rcpt_to = vec!["recipient@example.com".to_string()];
-        
+
         let email_content = "Subject: Test Subject\r\n\r\nTest body";
-        
+
         let result = session.parse_email_to_mailpace_payload(email_content);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No sender address"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No sender address"));
     }
 
     #[test]
@@ -951,9 +998,9 @@ mod tests {
         session.data = b"test data".to_vec();
         session.state = SmtpState::Data;
         session.auth_token = Some("token".to_string());
-        
+
         session.reset_session();
-        
+
         assert_eq!(session.mail_from, None);
         assert!(session.rcpt_to.is_empty());
         assert!(session.data.is_empty());
@@ -967,16 +1014,16 @@ mod tests {
         // Create a mock TcpStream for testing
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        
+
         let client_task = tokio::spawn(async move {
             let stream = TcpStream::connect(addr).await.unwrap();
             let mut connection = Connection::Plain(stream);
-            
+
             let session = create_test_session();
             let result = session.send_response(&mut connection, "250 OK").await;
             assert!(result.is_ok());
         });
-        
+
         let server_task = tokio::spawn(async move {
             let (mut socket, _) = listener.accept().await.unwrap();
             let mut buf = [0; 1024];
@@ -984,7 +1031,7 @@ mod tests {
             let response = String::from_utf8_lossy(&buf[..n]);
             assert_eq!(response, "250 OK\r\n");
         });
-        
+
         let _ = tokio::join!(client_task, server_task);
     }
 

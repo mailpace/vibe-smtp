@@ -362,7 +362,10 @@ async fn test_html_compression_multipart() -> Result<()> {
         )?;
 
     let result = transport.send(&email);
-    assert!(result.is_ok(), "Multipart HTML email should be sent successfully");
+    assert!(
+        result.is_ok(),
+        "Multipart HTML email should be sent successfully"
+    );
 
     Ok(())
 }
@@ -417,7 +420,10 @@ async fn test_html_compression_with_inline_styles() -> Result<()> {
         .body(html_body.to_string())?;
 
     let result = transport.send(&email);
-    assert!(result.is_ok(), "HTML email with CSS should be sent successfully");
+    assert!(
+        result.is_ok(),
+        "HTML email with CSS should be sent successfully"
+    );
 
     Ok(())
 }
@@ -452,7 +458,10 @@ async fn test_html_compression_disabled() -> Result<()> {
         .body(html_body.to_string())?;
 
     let result = transport.send(&email);
-    assert!(result.is_ok(), "HTML email should be sent successfully without compression");
+    assert!(
+        result.is_ok(),
+        "HTML email should be sent successfully without compression"
+    );
 
     Ok(())
 }
@@ -480,7 +489,10 @@ async fn test_plain_text_with_compression_enabled() -> Result<()> {
         .body(text_body.to_string())?;
 
     let result = transport.send(&email);
-    assert!(result.is_ok(), "Plain text email should be sent successfully");
+    assert!(
+        result.is_ok(),
+        "Plain text email should be sent successfully"
+    );
 
     Ok(())
 }
@@ -527,7 +539,10 @@ async fn test_html_compression_with_javascript() -> Result<()> {
         .body(html_body.to_string())?;
 
     let result = transport.send(&email);
-    assert!(result.is_ok(), "HTML email with JavaScript should be sent successfully");
+    assert!(
+        result.is_ok(),
+        "HTML email with JavaScript should be sent successfully"
+    );
 
     Ok(())
 }
@@ -562,7 +577,10 @@ async fn test_html_compression_malformed_html() -> Result<()> {
         .body(malformed_html.to_string())?;
 
     let result = transport.send(&email);
-    assert!(result.is_ok(), "Malformed HTML email should be sent successfully with fallback");
+    assert!(
+        result.is_ok(),
+        "Malformed HTML email should be sent successfully with fallback"
+    );
 
     Ok(())
 }
@@ -581,7 +599,8 @@ async fn test_html_compression_large_html() -> Result<()> {
     );
 
     // Generate a large HTML email
-    let mut html_body = String::from(r#"
+    let mut html_body = String::from(
+        r#"
     <html>
         <head>
             <!-- Large HTML compression test -->
@@ -593,23 +612,29 @@ async fn test_html_compression_large_html() -> Result<()> {
         </head>
         <body>
             <h1>Large HTML Content Test</h1>
-    "#);
+    "#,
+    );
 
     // Add many repetitive HTML elements
     for i in 0..100 {
-        html_body.push_str(&format!(r#"
+        html_body.push_str(&format!(
+            r#"
             <div class="item">
                 <!-- Item {} comment -->
                 <h3>   Item {}   </h3>
                 <p>   This is item number {} with extra whitespace.   </p>
             </div>
-        "#, i, i, i));
+        "#,
+            i, i, i
+        ));
     }
 
-    html_body.push_str(r#"
+    html_body.push_str(
+        r#"
         </body>
     </html>
-    "#);
+    "#,
+    );
 
     let email = Message::builder()
         .from("bulk@example.com".parse()?)
@@ -618,7 +643,10 @@ async fn test_html_compression_large_html() -> Result<()> {
         .body(html_body)?;
 
     let result = transport.send(&email);
-    assert!(result.is_ok(), "Large HTML email should be sent successfully");
+    assert!(
+        result.is_ok(),
+        "Large HTML email should be sent successfully"
+    );
 
     Ok(())
 }

@@ -83,7 +83,8 @@ async fn test_multipart_html_compression() -> Result<()> {
     </html>
     "#;
 
-    let text_part = "Multipart HTML Compression\n\nThis HTML part should be compressed in a multipart email.";
+    let text_part =
+        "Multipart HTML Compression\n\nThis HTML part should be compressed in a multipart email.";
 
     let email = Message::builder()
         .from("newsletter@example.com".parse()?)
@@ -96,7 +97,10 @@ async fn test_multipart_html_compression() -> Result<()> {
         )?;
 
     let result = transport.send(&email);
-    assert!(result.is_ok(), "Multipart HTML compression test should succeed");
+    assert!(
+        result.is_ok(),
+        "Multipart HTML compression test should succeed"
+    );
 
     Ok(())
 }
@@ -198,7 +202,10 @@ async fn test_css_javascript_compression() -> Result<()> {
         .body(html_with_assets.to_string())?;
 
     let result = transport.send(&email);
-    assert!(result.is_ok(), "HTML with CSS and JS should be compressed successfully");
+    assert!(
+        result.is_ok(),
+        "HTML with CSS and JS should be compressed successfully"
+    );
 
     Ok(())
 }
@@ -237,7 +244,10 @@ async fn test_malformed_html_handling() -> Result<()> {
         .body(malformed_html.to_string())?;
 
     let result = transport.send(&email);
-    assert!(result.is_ok(), "Malformed HTML should be handled gracefully");
+    assert!(
+        result.is_ok(),
+        "Malformed HTML should be handled gracefully"
+    );
 
     Ok(())
 }
@@ -293,7 +303,8 @@ async fn test_large_html_compression() -> Result<()> {
     );
 
     // Generate large HTML content
-    let mut large_html = String::from(r#"
+    let mut large_html = String::from(
+        r#"
     <html>
         <head>
             <!-- Large HTML compression test -->
@@ -308,11 +319,13 @@ async fn test_large_html_compression() -> Result<()> {
         <body>
             <h1>Product Catalog</h1>
             <div class="products">
-    "#);
+    "#,
+    );
 
     // Add many products to create a large email
     for i in 1..=200 {
-        large_html.push_str(&format!(r#"
+        large_html.push_str(&format!(
+            r#"
                 <div class="product">
                     <!-- Product {} -->
                     <div class="product-title">   Product {}   </div>
@@ -322,14 +335,18 @@ async fn test_large_html_compression() -> Result<()> {
                     </div>
                     <div class="price">Price: ${}.99</div>
                 </div>
-        "#, i, i, i, i));
+        "#,
+            i, i, i, i
+        ));
     }
 
-    large_html.push_str(r#"
+    large_html.push_str(
+        r#"
             </div>
         </body>
     </html>
-    "#);
+    "#,
+    );
 
     let email = Message::builder()
         .from("catalog@example.com".parse()?)
@@ -338,7 +355,10 @@ async fn test_large_html_compression() -> Result<()> {
         .body(large_html)?;
 
     let result = transport.send(&email);
-    assert!(result.is_ok(), "Large HTML email should be compressed and sent successfully");
+    assert!(
+        result.is_ok(),
+        "Large HTML email should be compressed and sent successfully"
+    );
 
     Ok(())
 }
@@ -470,7 +490,10 @@ async fn test_email_template_compression() -> Result<()> {
         .body(template_html.to_string())?;
 
     let result = transport.send(&email);
-    assert!(result.is_ok(), "Email template should be compressed and sent successfully");
+    assert!(
+        result.is_ok(),
+        "Email template should be compressed and sent successfully"
+    );
 
     Ok(())
 }
