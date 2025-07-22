@@ -9,19 +9,19 @@ pub struct HtmlCompressor {
 
 impl HtmlCompressor {
     pub fn new() -> Self {
-        let mut config = Cfg::default();
-
-        // Configure compression settings for optimal HTML compression
-        config.do_not_minify_doctype = false;
-        config.ensure_spec_compliant_unquoted_attribute_values = true;
-        config.keep_closing_tags = true; // Keep for email client compatibility
-        config.keep_html_and_head_opening_tags = true; // Keep for email client compatibility
-        config.keep_spaces_between_attributes = false;
-        config.keep_comments = false; // Remove comments
-        config.minify_css = true;
-        config.minify_js = true;
-        config.remove_bangs = false;
-        config.remove_processing_instructions = true;
+        let config = Cfg {
+            do_not_minify_doctype: false,
+            ensure_spec_compliant_unquoted_attribute_values: true,
+            keep_closing_tags: true, // Keep for email client compatibility
+            keep_html_and_head_opening_tags: true, // Keep for email client compatibility
+            keep_spaces_between_attributes: false,
+            keep_comments: false, // Remove comments
+            minify_css: true,
+            minify_js: true,
+            remove_bangs: false,
+            remove_processing_instructions: true,
+            ..Cfg::default()
+        };
 
         Self { config }
     }

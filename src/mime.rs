@@ -741,8 +741,7 @@ Body content after empty line"#;
             let result = parser.extract_boundary(content_type);
             assert!(
                 result.is_ok(),
-                "Failed to parse boundary from: {}",
-                content_type
+                "Failed to parse boundary from: {content_type}",
             );
         }
     }

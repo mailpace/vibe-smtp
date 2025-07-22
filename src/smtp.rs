@@ -36,7 +36,6 @@ pub struct SmtpSession {
     enable_attachments: bool,
     max_attachment_size: usize,
     max_attachments: usize,
-    enable_html_compression: bool,
     html_compressor: Option<HtmlCompressor>,
 }
 
@@ -71,7 +70,6 @@ impl SmtpSession {
             enable_attachments,
             max_attachment_size,
             max_attachments,
-            enable_html_compression,
             html_compressor,
         }
     }
@@ -545,8 +543,8 @@ mod tests {
         assert!(session.rcpt_to.is_empty());
         assert!(session.data.is_empty());
         assert_eq!(session.auth_token, None);
-        assert_eq!(session.supports_starttls, false);
-        assert_eq!(session.enable_attachments, false);
+        assert!(!session.supports_starttls);
+        assert!(!session.enable_attachments);
         assert_eq!(session.max_attachment_size, 1024 * 1024);
         assert_eq!(session.max_attachments, 5);
     }
@@ -554,17 +552,15 @@ mod tests {
     #[test]
     fn test_smtp_session_new_with_attachments() {
         let session = create_test_session_with_attachments();
-        assert_eq!(session.enable_attachments, true);
+        assert!(session.enable_attachments);
     }
 
     #[test]
     fn test_smtp_session_new_with_html_compression() {
         let session = create_test_session_with_html_compression();
-        assert_eq!(session.enable_html_compression, true);
         assert!(session.html_compressor.is_some());
 
         let session_no_compression = create_test_session();
-        assert_eq!(session_no_compression.enable_html_compression, false);
         assert!(session_no_compression.html_compressor.is_none());
     }
 
@@ -619,7 +615,7 @@ mod tests {
         // Test AUTH PLAIN with base64 encoded credentials
         let auth_string = "\0testuser\0testpass";
         let encoded = base64::engine::general_purpose::STANDARD.encode(auth_string);
-        let command = format!("AUTH PLAIN {}", encoded);
+        let command = format!("AUTH PLAIN {encoded}");
 
         let result = session.process_command(&command).await.unwrap();
         assert_eq!(result, Some("235 Authentication successful".to_string()));
