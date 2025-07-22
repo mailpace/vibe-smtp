@@ -10,7 +10,7 @@
   [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
   [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://hub.docker.com)
   
-  [**Website**](https://mailpace.com) • [**Documentation**](https://docs.mailpace.com) • [**API Reference**](https://docs.mailpace.com/reference/send) • [**Support**](https://mailpace.com/help)
+  [**Website**](https://mailpace.com) • [**Documentation**](https://docs.mailpace.com) • [**API Reference**](https://docs.mailpace.com/reference/send) • [**Support**](mailto:support@mailpace.com)
 </div>
 
 ---
