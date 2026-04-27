@@ -268,7 +268,7 @@ impl SmtpSession {
                     if cmd == "EHLO" {
                         let mut response = vec![
                             "250-vibe-gateway".to_string(),
-                            "250-AUTH PLAIN LOGIN".to_string(),
+                            "250-AUTH PLAIN".to_string(),
                         ];
 
                         if self.supports_starttls {
@@ -296,30 +296,45 @@ impl SmtpSession {
                 if parts.len() >= 2 {
                     match parts[1].to_uppercase().as_str() {
                         "PLAIN" => {
-                            if parts.len() >= 3 {
-                                // AUTH PLAIN token - decode and extract token
-                                if let Ok(decoded) = general_purpose::STANDARD.decode(parts[2]) {
-                                    if let Ok(auth_string) = String::from_utf8(decoded) {
-                                        // PLAIN format: \0username\0password
-                                        // For MailPace, both username and password are the API token
-                                        let parts: Vec<&str> = auth_string.split('\0').collect();
-                                        if parts.len() >= 3 {
-                                            self.auth_token = Some(parts[1].to_string());
-                                            // Use username as token
-                                        }
-                                    }
-                                }
-                                Ok(Some("235 Authentication successful".to_string()))
-                            } else {
-                                // Multi-step AUTH PLAIN
-                                Ok(Some("334 ".to_string()))
+                            // Only support single-line AUTH PLAIN with an initial response.
+                            if parts.len() < 3 {
+                                return Ok(Some(
+                                    "504 Unsupported AUTH flow: use AUTH PLAIN with initial response"
+                                        .to_string(),
+                                ));
                             }
+
+                            // AUTH PLAIN initial response - decode and extract token.
+                            let decoded = match general_purpose::STANDARD.decode(parts[2]) {
+                                Ok(decoded) => decoded,
+                                Err(_) => {
+                                    return Ok(Some("535 Authentication credentials invalid".to_string()))
+                                }
+                            };
+
+                            let auth_string = match String::from_utf8(decoded) {
+                                Ok(auth_string) => auth_string,
+                                Err(_) => {
+                                    return Ok(Some("535 Authentication credentials invalid".to_string()))
+                                }
+                            };
+
+                            // PLAIN format: \0username\0password
+                            // For MailPace, both username and password are expected to be the API token.
+                            let auth_parts: Vec<&str> = auth_string.split('\0').collect();
+                            if auth_parts.len() < 3
+                                || auth_parts[1].is_empty()
+                                || auth_parts[1] != auth_parts[2]
+                            {
+                                return Ok(Some("535 Authentication credentials invalid".to_string()));
+                            }
+
+                            self.auth_token = Some(auth_parts[1].to_string());
+                            Ok(Some("235 Authentication successful".to_string()))
                         }
-                        "LOGIN" => {
-                            // For LOGIN, we need to implement the multi-step process
-                            // This is a simplified implementation that accepts any token
-                            Ok(Some("334 VXNlcm5hbWU6".to_string())) // Username: in base64
-                        }
+                        "LOGIN" => Ok(Some(
+                            "504 Unsupported AUTH mechanism: LOGIN; use AUTH PLAIN".to_string(),
+                        )),
                         _ => Ok(Some("504 Unrecognized authentication type".to_string())),
                     }
                 } else {
@@ -642,7 +657,7 @@ mod tests {
         assert!(result.is_some());
         let response = result.unwrap();
         assert!(response.contains("250-vibe-gateway"));
-        assert!(response.contains("250-AUTH PLAIN LOGIN"));
+        assert!(response.contains("250-AUTH PLAIN"));
         assert!(response.contains("250 8BITMIME"));
         assert_eq!(session.state, SmtpState::Helo);
         assert_eq!(session.helo, Some("example.com".to_string()));
@@ -687,7 +702,10 @@ mod tests {
         let mut session = create_test_session();
 
         let result = session.process_command("AUTH PLAIN").await.unwrap();
-        assert_eq!(result, Some("334 ".to_string()));
+        assert_eq!(
+            result,
+            Some("504 Unsupported AUTH flow: use AUTH PLAIN with initial response".to_string())
+        );
     }
 
     #[tokio::test]
@@ -695,7 +713,39 @@ mod tests {
         let mut session = create_test_session();
 
         let result = session.process_command("AUTH LOGIN").await.unwrap();
-        assert_eq!(result, Some("334 VXNlcm5hbWU6".to_string()));
+        assert_eq!(
+            result,
+            Some("504 Unsupported AUTH mechanism: LOGIN; use AUTH PLAIN".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_process_command_auth_plain_invalid_base64() {
+        let mut session = create_test_session();
+
+        let result = session
+            .process_command("AUTH PLAIN not-valid-base64")
+            .await
+            .unwrap();
+        assert_eq!(
+            result,
+            Some("535 Authentication credentials invalid".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_process_command_auth_plain_mismatched_username_password() {
+        let mut session = create_test_session();
+
+        let auth_string = "\0testuser\0different";
+        let encoded = base64::engine::general_purpose::STANDARD.encode(auth_string);
+        let command = format!("AUTH PLAIN {encoded}");
+        let result = session.process_command(&command).await.unwrap();
+
+        assert_eq!(
+            result,
+            Some("535 Authentication credentials invalid".to_string())
+        );
     }
 
     #[tokio::test]
