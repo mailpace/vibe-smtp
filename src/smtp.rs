@@ -266,10 +266,8 @@ impl SmtpSession {
                     self.helo = Some(parts[1].to_string());
                     self.state = SmtpState::Helo;
                     if cmd == "EHLO" {
-                        let mut response = vec![
-                            "250-vibe-gateway".to_string(),
-                            "250-AUTH PLAIN".to_string(),
-                        ];
+                        let mut response =
+                            vec!["250-vibe-gateway".to_string(), "250-AUTH PLAIN".to_string()];
 
                         if self.supports_starttls {
                             response.push("250-STARTTLS".to_string());
@@ -308,14 +306,18 @@ impl SmtpSession {
                             let decoded = match general_purpose::STANDARD.decode(parts[2]) {
                                 Ok(decoded) => decoded,
                                 Err(_) => {
-                                    return Ok(Some("535 Authentication credentials invalid".to_string()))
+                                    return Ok(Some(
+                                        "535 Authentication credentials invalid".to_string(),
+                                    ))
                                 }
                             };
 
                             let auth_string = match String::from_utf8(decoded) {
                                 Ok(auth_string) => auth_string,
                                 Err(_) => {
-                                    return Ok(Some("535 Authentication credentials invalid".to_string()))
+                                    return Ok(Some(
+                                        "535 Authentication credentials invalid".to_string(),
+                                    ))
                                 }
                             };
 
@@ -326,7 +328,9 @@ impl SmtpSession {
                                 || auth_parts[1].is_empty()
                                 || auth_parts[1] != auth_parts[2]
                             {
-                                return Ok(Some("535 Authentication credentials invalid".to_string()));
+                                return Ok(Some(
+                                    "535 Authentication credentials invalid".to_string(),
+                                ));
                             }
 
                             self.auth_token = Some(auth_parts[1].to_string());
@@ -688,13 +692,13 @@ mod tests {
         let mut session = create_test_session();
 
         // Test AUTH PLAIN with base64 encoded credentials
-        let auth_string = "\0testuser\0testpass";
+        let auth_string = "\0test-token\0test-token";
         let encoded = base64::engine::general_purpose::STANDARD.encode(auth_string);
         let command = format!("AUTH PLAIN {encoded}");
 
         let result = session.process_command(&command).await.unwrap();
         assert_eq!(result, Some("235 Authentication successful".to_string()));
-        assert_eq!(session.auth_token, Some("testuser".to_string()));
+        assert_eq!(session.auth_token, Some("test-token".to_string()));
     }
 
     #[tokio::test]
