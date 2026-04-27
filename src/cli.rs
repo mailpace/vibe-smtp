@@ -42,4 +42,44 @@ pub struct Args {
     /// Enable HTML compression for email bodies
     #[arg(long)]
     pub enable_html_compression: bool,
+
+    /// Maximum concurrent SMTP sessions
+    #[arg(long, default_value = "1000")]
+    pub max_connections: usize,
+
+    /// Maximum SMTP command length in bytes
+    #[arg(long, default_value = "2048")]
+    pub max_command_length: usize,
+
+    /// Maximum SMTP message size in bytes
+    #[arg(long, default_value = "26214400")]
+    pub max_message_size: usize,
+
+    /// Maximum recipients accepted per message
+    #[arg(long, default_value = "100")]
+    pub max_recipients: usize,
+
+    /// Per-command socket read timeout in seconds
+    #[arg(long, default_value = "30")]
+    pub read_timeout_secs: u64,
+
+    /// Socket write timeout in seconds
+    #[arg(long, default_value = "30")]
+    pub write_timeout_secs: u64,
+
+    /// Maximum SMTP session duration in seconds
+    #[arg(long, default_value = "300")]
+    pub max_session_duration_secs: u64,
+
+    /// MailPace API request timeout in seconds
+    #[arg(long, default_value = "15")]
+    pub mailpace_timeout_secs: u64,
+
+    /// Number of retries for transient MailPace API failures
+    #[arg(long, default_value = "2")]
+    pub mailpace_retries: usize,
+
+    /// Initial MailPace retry backoff in milliseconds
+    #[arg(long, default_value = "250")]
+    pub mailpace_retry_backoff_ms: u64,
 }

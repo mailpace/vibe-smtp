@@ -3,6 +3,7 @@ use base64::{engine::general_purpose, Engine as _};
 use std::collections::HashMap;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::TcpStream;
+use tokio::time::{timeout, Duration, Instant};
 use tokio_rustls::TlsAcceptor;
 use tracing::{debug, error, info, warn};
 
@@ -36,6 +37,13 @@ pub struct SmtpSession {
     max_attachment_size: usize,
     max_attachments: usize,
     html_compressor: Option<HtmlCompressor>,
+    max_command_length: usize,
+    max_message_size: usize,
+    max_recipients: usize,
+    read_timeout: Duration,
+    write_timeout: Duration,
+    max_session_duration: Duration,
+    requires_ehlo_after_starttls: bool,
 }
 
 impl SmtpSession {
@@ -47,6 +55,12 @@ impl SmtpSession {
         max_attachment_size: usize,
         max_attachments: usize,
         enable_html_compression: bool,
+        max_command_length: usize,
+        max_message_size: usize,
+        max_recipients: usize,
+        read_timeout: Duration,
+        write_timeout: Duration,
+        max_session_duration: Duration,
     ) -> Self {
         let supports_starttls = tls_acceptor.is_some();
         let html_compressor = if enable_html_compression {
@@ -70,35 +84,30 @@ impl SmtpSession {
             max_attachment_size,
             max_attachments,
             html_compressor,
+            max_command_length,
+            max_message_size,
+            max_recipients,
+            read_timeout,
+            write_timeout,
+            max_session_duration,
+            requires_ehlo_after_starttls: false,
         }
     }
 
     pub async fn handle(&mut self, stream: TcpStream) -> Result<()> {
-        let mut connection = Connection::Plain(stream);
+        let mut connection = Connection::Plain(BufReader::new(stream));
         self.send_response(&mut connection, "220 vibe-gateway SMTP ready")
             .await?;
+        let session_start = Instant::now();
 
         loop {
-            let mut line = String::new();
+            if session_start.elapsed() >= self.max_session_duration {
+                self.send_response(&mut connection, "421 Session timeout").await?;
+                break;
+            }
 
-            // Read command
-            let command = match &mut connection {
-                Connection::Plain(stream) => {
-                    let mut reader = BufReader::new(stream);
-                    let bytes_read = reader.read_line(&mut line).await?;
-                    if bytes_read == 0 {
-                        break;
-                    }
-                    line.trim().to_string()
-                }
-                Connection::Tls(stream) => {
-                    let mut reader = BufReader::new(stream);
-                    let bytes_read = reader.read_line(&mut line).await?;
-                    if bytes_read == 0 {
-                        break;
-                    }
-                    line.trim().to_string()
-                }
+            let Some(command) = self.read_command(&mut connection).await? else {
+                break;
             };
 
             debug!("Received command: {}", command);
@@ -109,16 +118,20 @@ impl SmtpSession {
                     self.send_response(&mut connection, "220 Ready to start TLS")
                         .await?;
 
-                    // Upgrade connection to TLS
-                    if let Connection::Plain(plain_stream) = connection {
-                        let tls_stream = acceptor
-                            .accept(plain_stream)
-                            .await
-                            .context("Failed to establish TLS connection")?;
-                        connection = Connection::Tls(Box::new(tls_stream));
-                        info!("TLS connection established");
-                    }
-                    continue;
+                    let plain_stream = connection
+                        .into_plain_stream()
+                        .context("STARTTLS requires plain connection")?;
+                    let tls_stream = acceptor
+                        .accept(plain_stream)
+                        .await
+                        .context("Failed to establish TLS connection")?;
+                    info!("TLS connection established");
+                    self.reset_after_starttls();
+                    return self.run_connection_loop(
+                        Connection::Tls(BufReader::new(Box::new(tls_stream))),
+                        session_start,
+                    )
+                    .await;
                 } else {
                     self.send_response(&mut connection, "454 TLS not available")
                         .await?;
@@ -146,27 +159,12 @@ impl SmtpSession {
 
             // Handle DATA command specially
             if self.state == SmtpState::Data {
-                match &mut connection {
-                    Connection::Plain(stream) => {
-                        let mut reader = BufReader::new(stream);
-                        if let Err(e) = self.read_data(&mut reader).await {
-                            error!("Error reading data: {}", e);
-                            self.send_response(&mut connection, "451 Error reading data")
-                                .await?;
-                        } else {
-                            self.handle_data_processing(&mut connection).await?;
-                        }
-                    }
-                    Connection::Tls(stream) => {
-                        let mut reader = BufReader::new(stream);
-                        if let Err(e) = self.read_data(&mut reader).await {
-                            error!("Error reading data: {}", e);
-                            self.send_response(&mut connection, "451 Error reading data")
-                                .await?;
-                        } else {
-                            self.handle_data_processing(&mut connection).await?;
-                        }
-                    }
+                if let Err(e) = self.read_data(&mut connection).await {
+                    error!("Error reading data: {}", e);
+                    self.send_response(&mut connection, "451 Error reading data")
+                        .await?;
+                } else {
+                    self.handle_data_processing(&mut connection).await?;
                 }
             }
         }
@@ -178,26 +176,25 @@ impl SmtpSession {
         &mut self,
         tls_stream: Box<tokio_rustls::server::TlsStream<TcpStream>>,
     ) -> Result<()> {
-        let mut connection = Connection::Tls(tls_stream);
+        let mut connection = Connection::Tls(BufReader::new(tls_stream));
         self.send_response(&mut connection, "220 vibe-gateway SMTP ready")
             .await?;
+        self.run_connection_loop(connection, Instant::now()).await
+    }
 
+    async fn run_connection_loop(
+        &mut self,
+        mut connection: Connection,
+        session_start: Instant,
+    ) -> Result<()> {
         loop {
-            let mut line = String::new();
+            if session_start.elapsed() >= self.max_session_duration {
+                self.send_response(&mut connection, "421 Session timeout").await?;
+                break;
+            }
 
-            // Read command from TLS stream
-            let command = match &mut connection {
-                Connection::Tls(stream) => {
-                    let mut reader = BufReader::new(stream);
-                    let bytes_read = reader.read_line(&mut line).await?;
-                    if bytes_read == 0 {
-                        break;
-                    }
-                    line.trim().to_string()
-                }
-                _ => {
-                    return Err(anyhow::anyhow!("Expected TLS connection"));
-                }
+            let Some(command) = self.read_command(&mut connection).await? else {
+                break;
             };
 
             debug!("Received command: {}", command);
@@ -229,11 +226,39 @@ impl SmtpSession {
 
             // Handle DATA command specially
             if self.state == SmtpState::Data {
-                self.handle_data_processing(&mut connection).await?;
+                if let Err(e) = self.read_data(&mut connection).await {
+                    error!("Error reading data: {}", e);
+                    self.send_response(&mut connection, "451 Error reading data")
+                        .await?;
+                } else {
+                    self.handle_data_processing(&mut connection).await?;
+                }
             }
         }
 
         Ok(())
+    }
+
+    async fn read_command(&self, connection: &mut Connection) -> Result<Option<String>> {
+        let mut line = String::new();
+        let bytes_read = timeout(self.read_timeout, connection.read_line(&mut line))
+            .await
+            .context("Timed out waiting for SMTP command")??;
+        if bytes_read == 0 {
+            return Ok(None);
+        }
+
+        if line.len() > self.max_command_length {
+            return Err(anyhow::anyhow!(
+                "SMTP command too long: {} bytes (limit: {})",
+                line.len(),
+                self.max_command_length
+            ));
+        }
+
+        Ok(Some(
+            line.trim_end_matches(['\r', '\n']).trim().to_string(),
+        ))
     }
 
     async fn handle_data_processing(&mut self, connection: &mut Connection) -> Result<()> {
@@ -260,11 +285,18 @@ impl SmtpSession {
 
         let cmd = parts[0].to_uppercase();
 
+        if self.requires_ehlo_after_starttls
+            && !matches!(cmd.as_str(), "HELO" | "EHLO" | "NOOP" | "RSET" | "QUIT")
+        {
+            return Ok(Some("503 Send EHLO/HELO first after STARTTLS".to_string()));
+        }
+
         match cmd.as_str() {
             "HELO" | "EHLO" => {
                 if parts.len() > 1 {
                     self.helo = Some(parts[1].to_string());
                     self.state = SmtpState::Helo;
+                    self.requires_ehlo_after_starttls = false;
                     if cmd == "EHLO" {
                         let mut response =
                             vec!["250-vibe-gateway".to_string(), "250-AUTH PLAIN".to_string()];
@@ -358,6 +390,9 @@ impl SmtpSession {
             }
             "RCPT" => {
                 if command.to_uppercase().starts_with("RCPT TO:") {
+                    if self.rcpt_to.len() >= self.max_recipients {
+                        return Ok(Some("452 Too many recipients".to_string()));
+                    }
                     let to = command[8..].trim();
                     let to = to.trim_start_matches('<').trim_end_matches('>');
                     self.rcpt_to.push(to.to_string());
@@ -388,16 +423,16 @@ impl SmtpSession {
         }
     }
 
-    async fn read_data<R>(&mut self, reader: &mut BufReader<R>) -> Result<()>
-    where
-        R: tokio::io::AsyncRead + Unpin,
-    {
+    async fn read_data(&mut self, connection: &mut Connection) -> Result<()> {
         let mut line = String::new();
         self.data.clear();
+        let mut total_size = 0usize;
 
         loop {
             line.clear();
-            let bytes_read = reader.read_line(&mut line).await?;
+            let bytes_read = timeout(self.read_timeout, connection.read_line(&mut line))
+                .await
+                .context("Timed out waiting for SMTP DATA body")??;
             if bytes_read == 0 {
                 break;
             }
@@ -411,6 +446,15 @@ impl SmtpSession {
                 line.remove(0);
             }
 
+            total_size = total_size.saturating_add(line.len());
+            if total_size > self.max_message_size {
+                return Err(anyhow::anyhow!(
+                    "SMTP message too large: {} bytes (limit: {})",
+                    total_size,
+                    self.max_message_size
+                ));
+            }
+
             self.data.extend_from_slice(line.as_bytes());
         }
 
@@ -419,7 +463,7 @@ impl SmtpSession {
 
     async fn process_email_data(&mut self) -> Result<()> {
         let email_content = String::from_utf8_lossy(&self.data);
-        debug!("Email content: {}", email_content);
+        debug!("Processing email content ({} bytes)", self.data.len());
 
         // Parse email manually - simplified approach
         let payload = self.parse_email_to_mailpace_payload(&email_content)?;
@@ -531,11 +575,24 @@ impl SmtpSession {
 
     async fn send_response(&self, connection: &mut Connection, response: &str) -> Result<()> {
         debug!("Sending response: {}", response);
-        connection
-            .write_all(format!("{response}\r\n").as_bytes())
-            .await?;
-        connection.flush().await?;
+        timeout(
+            self.write_timeout,
+            connection.write_all(format!("{response}\r\n").as_bytes()),
+        )
+        .await
+        .context("Timed out writing SMTP response")??;
+        timeout(self.write_timeout, connection.flush())
+            .await
+            .context("Timed out flushing SMTP response")??;
         Ok(())
+    }
+
+    fn reset_after_starttls(&mut self) {
+        self.helo = None;
+        self.reset_session();
+        self.auth_token = None;
+        self.state = SmtpState::Init;
+        self.requires_ehlo_after_starttls = true;
     }
 
     fn reset_session(&mut self) {
@@ -554,12 +611,18 @@ mod tests {
     use reqwest::Client;
     use tokio::io::AsyncReadExt;
     use tokio::net::{TcpListener, TcpStream};
-    use tokio_test::io::Builder;
 
     fn create_test_session() -> SmtpSession {
         let client = Client::new();
         let mailpace_client =
-            MailPaceClient::new(client, "https://api.mailpace.com/v1/send".to_string());
+            MailPaceClient::new(
+                client,
+                "https://api.mailpace.com/v1/send".to_string(),
+                2,
+                Duration::from_millis(250),
+            );
+        let (max_command_length, max_message_size, max_recipients, read_timeout, write_timeout, max_session_duration) =
+            default_limits_args();
         SmtpSession::new(
             mailpace_client,
             Some("test-token".to_string()),
@@ -568,13 +631,26 @@ mod tests {
             1024 * 1024, // 1MB
             5,
             false, // HTML compression disabled for most tests
+            max_command_length,
+            max_message_size,
+            max_recipients,
+            read_timeout,
+            write_timeout,
+            max_session_duration,
         )
     }
 
     fn create_test_session_with_attachments() -> SmtpSession {
         let client = Client::new();
         let mailpace_client =
-            MailPaceClient::new(client, "https://api.mailpace.com/v1/send".to_string());
+            MailPaceClient::new(
+                client,
+                "https://api.mailpace.com/v1/send".to_string(),
+                2,
+                Duration::from_millis(250),
+            );
+        let (max_command_length, max_message_size, max_recipients, read_timeout, write_timeout, max_session_duration) =
+            default_limits_args();
         SmtpSession::new(
             mailpace_client,
             Some("test-token".to_string()),
@@ -583,13 +659,26 @@ mod tests {
             1024 * 1024, // 1MB
             5,
             false, // HTML compression disabled for most tests
+            max_command_length,
+            max_message_size,
+            max_recipients,
+            read_timeout,
+            write_timeout,
+            max_session_duration,
         )
     }
 
     fn create_test_session_with_html_compression() -> SmtpSession {
         let client = Client::new();
         let mailpace_client =
-            MailPaceClient::new(client, "https://api.mailpace.com/v1/send".to_string());
+            MailPaceClient::new(
+                client,
+                "https://api.mailpace.com/v1/send".to_string(),
+                2,
+                Duration::from_millis(250),
+            );
+        let (max_command_length, max_message_size, max_recipients, read_timeout, write_timeout, max_session_duration) =
+            default_limits_args();
         SmtpSession::new(
             mailpace_client,
             Some("test-token".to_string()),
@@ -598,6 +687,23 @@ mod tests {
             1024 * 1024, // 1MB
             5,
             true, // HTML compression enabled
+            max_command_length,
+            max_message_size,
+            max_recipients,
+            read_timeout,
+            write_timeout,
+            max_session_duration,
+        )
+    }
+
+    fn default_limits_args() -> (usize, usize, usize, Duration, Duration, Duration) {
+        (
+            2048,
+            10 * 1024 * 1024,
+            100,
+            Duration::from_secs(30),
+            Duration::from_secs(30),
+            Duration::from_secs(300),
         )
     }
 
@@ -841,6 +947,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_process_command_rcpt_limit() {
+        let client = Client::new();
+        let mailpace_client =
+            MailPaceClient::new(
+                client,
+                "https://api.mailpace.com/v1/send".to_string(),
+                2,
+                Duration::from_millis(250),
+            );
+        let mut session = SmtpSession::new(
+            mailpace_client,
+            Some("test-token".to_string()),
+            None,
+            false,
+            1024 * 1024,
+            5,
+            false,
+            2048,
+            10 * 1024 * 1024,
+            1,
+            Duration::from_secs(30),
+            Duration::from_secs(30),
+            Duration::from_secs(300),
+        );
+
+        let first = session
+            .process_command("RCPT TO:<recipient1@example.com>")
+            .await
+            .unwrap();
+        assert_eq!(first, Some("250 OK".to_string()));
+
+        let second = session
+            .process_command("RCPT TO:<recipient2@example.com>")
+            .await
+            .unwrap();
+        assert_eq!(second, Some("452 Too many recipients".to_string()));
+    }
+
+    #[tokio::test]
     async fn test_process_command_rcpt_invalid() {
         let mut session = create_test_session();
 
@@ -933,14 +1078,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_requires_helo_after_starttls() {
+        let mut session = create_test_session();
+        session.reset_after_starttls();
+
+        let result = session
+            .process_command("MAIL FROM:<test@example.com>")
+            .await
+            .unwrap();
+        assert_eq!(
+            result,
+            Some("503 Send EHLO/HELO first after STARTTLS".to_string())
+        );
+
+        let helo = session.process_command("EHLO example.com").await.unwrap();
+        assert!(helo.unwrap().contains("250-vibe-gateway"));
+        assert!(!session.requires_ehlo_after_starttls);
+    }
+
+    #[tokio::test]
     async fn test_read_data() {
         let mut session = create_test_session();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let payload = "Subject: Test\r\n\r\nThis is the body\r\n.\r\n".to_string();
 
-        let data = "Subject: Test\r\n\r\nThis is the body\r\n.\r\n";
-        let mock = Builder::new().read(data.as_bytes()).build();
-        let mut reader = BufReader::new(mock);
+        let writer = tokio::spawn(async move {
+            let mut stream = TcpStream::connect(addr).await.unwrap();
+            tokio::io::AsyncWriteExt::write_all(&mut stream, payload.as_bytes())
+                .await
+                .unwrap();
+        });
 
-        let result = session.read_data(&mut reader).await;
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut connection = Connection::Plain(BufReader::new(stream));
+        let result = session.read_data(&mut connection).await;
+        writer.await.unwrap();
         assert!(result.is_ok());
 
         let data_str = String::from_utf8(session.data.clone()).unwrap();
@@ -952,12 +1125,21 @@ mod tests {
     #[tokio::test]
     async fn test_read_data_with_dot_stuffing() {
         let mut session = create_test_session();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let payload = "Subject: Test\r\n\r\n..This line starts with two dots\r\n.\r\n".to_string();
 
-        let data = "Subject: Test\r\n\r\n..This line starts with two dots\r\n.\r\n";
-        let mock = Builder::new().read(data.as_bytes()).build();
-        let mut reader = BufReader::new(mock);
+        let writer = tokio::spawn(async move {
+            let mut stream = TcpStream::connect(addr).await.unwrap();
+            tokio::io::AsyncWriteExt::write_all(&mut stream, payload.as_bytes())
+                .await
+                .unwrap();
+        });
 
-        let result = session.read_data(&mut reader).await;
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut connection = Connection::Plain(BufReader::new(stream));
+        let result = session.read_data(&mut connection).await;
+        writer.await.unwrap();
         assert!(result.is_ok());
 
         let data_str = String::from_utf8(session.data.clone()).unwrap();
@@ -1127,7 +1309,7 @@ mod tests {
 
         let client_task = tokio::spawn(async move {
             let stream = TcpStream::connect(addr).await.unwrap();
-            let mut connection = Connection::Plain(stream);
+            let mut connection = Connection::Plain(BufReader::new(stream));
 
             let session = create_test_session();
             let result = session.send_response(&mut connection, "250 OK").await;

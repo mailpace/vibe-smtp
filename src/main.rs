@@ -1,8 +1,11 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use reqwest::Client;
+use std::sync::Arc;
 use tokio::net::TcpListener;
-use tracing::{error, info};
+use tokio::sync::Semaphore;
+use tokio::time::Duration;
+use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod cli;
@@ -21,11 +24,20 @@ use smtp::SmtpSession;
 struct ServerConfig {
     client: Client,
     mailpace_endpoint: String,
+    mailpace_retries: usize,
+    mailpace_retry_backoff: Duration,
     default_mailpace_token: Option<String>,
     enable_attachments: bool,
     max_attachment_size: usize,
     max_attachments: usize,
     enable_html_compression: bool,
+    max_command_length: usize,
+    max_message_size: usize,
+    max_recipients: usize,
+    read_timeout: Duration,
+    write_timeout: Duration,
+    max_session_duration: Duration,
+    connection_limit: Arc<Semaphore>,
 }
 
 #[derive(Clone, Copy)]
@@ -54,14 +66,29 @@ async fn start_listener(
     info!("SMTP server listening on {} ({})", address, tls_mode_str);
 
     loop {
-        let (stream, addr) = listener.accept().await?;
+        let (mut stream, addr) = listener.accept().await?;
         info!("New connection from {} on {}", addr, address);
+
+        let permit = match config.connection_limit.clone().try_acquire_owned() {
+            Ok(permit) => permit,
+            Err(_) => {
+                warn!(
+                    "Connection limit reached; rejecting {} on {}",
+                    addr, address
+                );
+                use tokio::io::AsyncWriteExt;
+                let _ = stream.write_all(b"421 Too many connections\r\n").await;
+                let _ = stream.flush().await;
+                continue;
+            }
+        };
 
         let config = config.clone();
         let tls_acceptor = tls_acceptor.clone();
         let address_clone = address.clone();
 
         tokio::spawn(async move {
+            let _permit = permit;
             let result = match tls_mode {
                 TlsMode::Implicit => {
                     // For implicit TLS (port 465), immediately upgrade to TLS
@@ -69,7 +96,12 @@ async fn start_listener(
                         match acceptor.accept(stream).await {
                             Ok(tls_stream) => {
                                 let mailpace_client =
-                                    MailPaceClient::new(config.client, config.mailpace_endpoint);
+                                    MailPaceClient::new(
+                                        config.client,
+                                        config.mailpace_endpoint,
+                                        config.mailpace_retries,
+                                        config.mailpace_retry_backoff,
+                                    );
                                 let mut session = SmtpSession::new(
                                     mailpace_client,
                                     config.default_mailpace_token,
@@ -78,6 +110,12 @@ async fn start_listener(
                                     config.max_attachment_size,
                                     config.max_attachments,
                                     config.enable_html_compression,
+                                    config.max_command_length,
+                                    config.max_message_size,
+                                    config.max_recipients,
+                                    config.read_timeout,
+                                    config.write_timeout,
+                                    config.max_session_duration,
                                 );
                                 session.handle_tls_stream(Box::new(tls_stream)).await
                             }
@@ -102,7 +140,12 @@ async fn start_listener(
                     };
 
                     let mailpace_client =
-                        MailPaceClient::new(config.client, config.mailpace_endpoint);
+                        MailPaceClient::new(
+                            config.client,
+                            config.mailpace_endpoint,
+                            config.mailpace_retries,
+                            config.mailpace_retry_backoff,
+                        );
                     let mut session = SmtpSession::new(
                         mailpace_client,
                         config.default_mailpace_token,
@@ -111,6 +154,12 @@ async fn start_listener(
                         config.max_attachment_size,
                         config.max_attachments,
                         config.enable_html_compression,
+                        config.max_command_length,
+                        config.max_message_size,
+                        config.max_recipients,
+                        config.read_timeout,
+                        config.write_timeout,
+                        config.max_session_duration,
                     );
                     session.handle(stream).await
                 }
@@ -187,14 +236,30 @@ async fn main() -> Result<()> {
         None
     };
 
+    let request_timeout = Duration::from_secs(args.mailpace_timeout_secs);
+    let client = Client::builder()
+        .connect_timeout(request_timeout)
+        .timeout(request_timeout)
+        .build()
+        .context("Failed to create MailPace HTTP client")?;
+
     let config = ServerConfig {
-        client: Client::new(),
+        client,
         mailpace_endpoint: args.mailpace_endpoint.clone(),
+        mailpace_retries: args.mailpace_retries,
+        mailpace_retry_backoff: Duration::from_millis(args.mailpace_retry_backoff_ms),
         default_mailpace_token: args.default_mailpace_token.clone(),
         enable_attachments: args.enable_attachments,
         max_attachment_size: args.max_attachment_size,
         max_attachments: args.max_attachments,
         enable_html_compression: args.enable_html_compression,
+        max_command_length: args.max_command_length,
+        max_message_size: args.max_message_size,
+        max_recipients: args.max_recipients,
+        read_timeout: Duration::from_secs(args.read_timeout_secs),
+        write_timeout: Duration::from_secs(args.write_timeout_secs),
+        max_session_duration: Duration::from_secs(args.max_session_duration_secs),
+        connection_limit: Arc::new(Semaphore::new(args.max_connections)),
     };
 
     if args.docker_multi_port {
