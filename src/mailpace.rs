@@ -68,7 +68,20 @@ impl MailPaceClient {
 
     pub async fn send_email(&self, payload: &MailPacePayload, token: &str) -> Result<()> {
         debug!("Sending payload to MailPace: {:?}", payload);
-        for attempt in 0..=self.retries {
+
+        let endpoint_url =
+            reqwest::Url::parse(&self.endpoint).context("Invalid MailPace API endpoint URL")?;
+        if endpoint_url.scheme() != "https" {
+            let host = endpoint_url.host_str().unwrap_or_default();
+            if host != "localhost" && host != "127.0.0.1" {
+                return Err(anyhow::anyhow!(
+                    "MailPace API endpoint must use HTTPS for non-local hosts"
+                ));
+            }
+        }
+
+        let mut attempt = 0usize;
+        loop {
             match self
                 .client
                 .post(&self.endpoint)
@@ -94,11 +107,12 @@ impl MailPaceClient {
                         .await
                         .unwrap_or_else(|_| "Unknown error".to_string());
 
-                    if attempt < self.retries
-                        && (status.is_server_error() || status.as_u16() == 429)
+                    if (status.is_server_error() || status.as_u16() == 429)
+                        && attempt < self.retries
                     {
                         let delay = self.retry_backoff.saturating_mul(2_u32.pow(attempt as u32));
                         sleep(delay).await;
+                        attempt += 1;
                         continue;
                     }
 
@@ -112,6 +126,7 @@ impl MailPaceClient {
                     if attempt < self.retries && (err.is_timeout() || err.is_connect()) {
                         let delay = self.retry_backoff.saturating_mul(2_u32.pow(attempt as u32));
                         sleep(delay).await;
+                        attempt += 1;
                         continue;
                     }
 
@@ -119,9 +134,5 @@ impl MailPaceClient {
                 }
             }
         }
-
-        Err(anyhow::anyhow!(
-            "MailPace API retry loop exited unexpectedly"
-        ))
     }
 }

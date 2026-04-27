@@ -51,7 +51,7 @@ pub struct Args {
     #[arg(long, default_value = "2048")]
     pub max_command_length: usize,
 
-    /// Maximum SMTP message size in bytes
+    /// Maximum SMTP message size in bytes (default: 25MB)
     #[arg(long, default_value = "26214400")]
     pub max_message_size: usize,
 
