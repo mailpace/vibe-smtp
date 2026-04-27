@@ -18,7 +18,7 @@ mod tls;
 
 use cli::Args;
 use mailpace::MailPaceClient;
-use smtp::SmtpSession;
+use smtp::{SmtpSession, SmtpSessionConfig};
 
 #[derive(Clone)]
 struct ServerConfig {
@@ -27,16 +27,7 @@ struct ServerConfig {
     mailpace_retries: usize,
     mailpace_retry_backoff: Duration,
     default_mailpace_token: Option<String>,
-    enable_attachments: bool,
-    max_attachment_size: usize,
-    max_attachments: usize,
-    enable_html_compression: bool,
-    max_command_length: usize,
-    max_message_size: usize,
-    max_recipients: usize,
-    read_timeout: Duration,
-    write_timeout: Duration,
-    max_session_duration: Duration,
+    smtp_config: SmtpSessionConfig,
     connection_limit: Arc<Semaphore>,
 }
 
@@ -95,27 +86,17 @@ async fn start_listener(
                     if let Some(acceptor) = tls_acceptor {
                         match acceptor.accept(stream).await {
                             Ok(tls_stream) => {
-                                let mailpace_client =
-                                    MailPaceClient::new(
-                                        config.client,
-                                        config.mailpace_endpoint,
-                                        config.mailpace_retries,
-                                        config.mailpace_retry_backoff,
-                                    );
+                                let mailpace_client = MailPaceClient::new(
+                                    config.client,
+                                    config.mailpace_endpoint,
+                                    config.mailpace_retries,
+                                    config.mailpace_retry_backoff,
+                                );
                                 let mut session = SmtpSession::new(
                                     mailpace_client,
                                     config.default_mailpace_token,
                                     None, // No STARTTLS for implicit TLS
-                                    config.enable_attachments,
-                                    config.max_attachment_size,
-                                    config.max_attachments,
-                                    config.enable_html_compression,
-                                    config.max_command_length,
-                                    config.max_message_size,
-                                    config.max_recipients,
-                                    config.read_timeout,
-                                    config.write_timeout,
-                                    config.max_session_duration,
+                                    config.smtp_config.clone(),
                                 );
                                 session.handle_tls_stream(Box::new(tls_stream)).await
                             }
@@ -139,27 +120,17 @@ async fn start_listener(
                         _ => None,
                     };
 
-                    let mailpace_client =
-                        MailPaceClient::new(
-                            config.client,
-                            config.mailpace_endpoint,
-                            config.mailpace_retries,
-                            config.mailpace_retry_backoff,
-                        );
+                    let mailpace_client = MailPaceClient::new(
+                        config.client,
+                        config.mailpace_endpoint,
+                        config.mailpace_retries,
+                        config.mailpace_retry_backoff,
+                    );
                     let mut session = SmtpSession::new(
                         mailpace_client,
                         config.default_mailpace_token,
                         session_tls_acceptor,
-                        config.enable_attachments,
-                        config.max_attachment_size,
-                        config.max_attachments,
-                        config.enable_html_compression,
-                        config.max_command_length,
-                        config.max_message_size,
-                        config.max_recipients,
-                        config.read_timeout,
-                        config.write_timeout,
-                        config.max_session_duration,
+                        config.smtp_config.clone(),
                     );
                     session.handle(stream).await
                 }
@@ -249,16 +220,18 @@ async fn main() -> Result<()> {
         mailpace_retries: args.mailpace_retries,
         mailpace_retry_backoff: Duration::from_millis(args.mailpace_retry_backoff_ms),
         default_mailpace_token: args.default_mailpace_token.clone(),
-        enable_attachments: args.enable_attachments,
-        max_attachment_size: args.max_attachment_size,
-        max_attachments: args.max_attachments,
-        enable_html_compression: args.enable_html_compression,
-        max_command_length: args.max_command_length,
-        max_message_size: args.max_message_size,
-        max_recipients: args.max_recipients,
-        read_timeout: Duration::from_secs(args.read_timeout_secs),
-        write_timeout: Duration::from_secs(args.write_timeout_secs),
-        max_session_duration: Duration::from_secs(args.max_session_duration_secs),
+        smtp_config: SmtpSessionConfig {
+            enable_attachments: args.enable_attachments,
+            max_attachment_size: args.max_attachment_size,
+            max_attachments: args.max_attachments,
+            enable_html_compression: args.enable_html_compression,
+            max_command_length: args.max_command_length,
+            max_message_size: args.max_message_size,
+            max_recipients: args.max_recipients,
+            read_timeout: Duration::from_secs(args.read_timeout_secs),
+            write_timeout: Duration::from_secs(args.write_timeout_secs),
+            max_session_duration: Duration::from_secs(args.max_session_duration_secs),
+        },
         connection_limit: Arc::new(Semaphore::new(args.max_connections)),
     };
 

@@ -94,7 +94,8 @@ impl MailPaceClient {
                         .await
                         .unwrap_or_else(|_| "Unknown error".to_string());
 
-                    if attempt < self.retries && (status.is_server_error() || status.as_u16() == 429)
+                    if attempt < self.retries
+                        && (status.is_server_error() || status.as_u16() == 429)
                     {
                         let delay = self.retry_backoff.saturating_mul(2_u32.pow(attempt as u32));
                         sleep(delay).await;
@@ -119,6 +120,8 @@ impl MailPaceClient {
             }
         }
 
-        Err(anyhow::anyhow!("MailPace API retry loop exited unexpectedly"))
+        Err(anyhow::anyhow!(
+            "MailPace API retry loop exited unexpectedly"
+        ))
     }
 }

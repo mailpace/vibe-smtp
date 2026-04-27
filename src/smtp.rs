@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use base64::{engine::general_purpose, Engine as _};
 use std::collections::HashMap;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::BufReader;
 use tokio::net::TcpStream;
 use tokio::time::{timeout, Duration, Instant};
 use tokio_rustls::TlsAcceptor;
@@ -46,24 +46,29 @@ pub struct SmtpSession {
     requires_ehlo_after_starttls: bool,
 }
 
+#[derive(Clone)]
+pub struct SmtpSessionConfig {
+    pub enable_attachments: bool,
+    pub max_attachment_size: usize,
+    pub max_attachments: usize,
+    pub enable_html_compression: bool,
+    pub max_command_length: usize,
+    pub max_message_size: usize,
+    pub max_recipients: usize,
+    pub read_timeout: Duration,
+    pub write_timeout: Duration,
+    pub max_session_duration: Duration,
+}
+
 impl SmtpSession {
     pub fn new(
         mailpace_client: MailPaceClient,
         default_mailpace_token: Option<String>,
         tls_acceptor: Option<TlsAcceptor>,
-        enable_attachments: bool,
-        max_attachment_size: usize,
-        max_attachments: usize,
-        enable_html_compression: bool,
-        max_command_length: usize,
-        max_message_size: usize,
-        max_recipients: usize,
-        read_timeout: Duration,
-        write_timeout: Duration,
-        max_session_duration: Duration,
+        config: SmtpSessionConfig,
     ) -> Self {
         let supports_starttls = tls_acceptor.is_some();
-        let html_compressor = if enable_html_compression {
+        let html_compressor = if config.enable_html_compression {
             Some(HtmlCompressor::new())
         } else {
             None
@@ -80,16 +85,16 @@ impl SmtpSession {
             auth_token: None,
             tls_acceptor,
             supports_starttls,
-            enable_attachments,
-            max_attachment_size,
-            max_attachments,
+            enable_attachments: config.enable_attachments,
+            max_attachment_size: config.max_attachment_size,
+            max_attachments: config.max_attachments,
             html_compressor,
-            max_command_length,
-            max_message_size,
-            max_recipients,
-            read_timeout,
-            write_timeout,
-            max_session_duration,
+            max_command_length: config.max_command_length,
+            max_message_size: config.max_message_size,
+            max_recipients: config.max_recipients,
+            read_timeout: config.read_timeout,
+            write_timeout: config.write_timeout,
+            max_session_duration: config.max_session_duration,
             requires_ehlo_after_starttls: false,
         }
     }
@@ -102,7 +107,8 @@ impl SmtpSession {
 
         loop {
             if session_start.elapsed() >= self.max_session_duration {
-                self.send_response(&mut connection, "421 Session timeout").await?;
+                self.send_response(&mut connection, "421 Session timeout")
+                    .await?;
                 break;
             }
 
@@ -127,11 +133,12 @@ impl SmtpSession {
                         .context("Failed to establish TLS connection")?;
                     info!("TLS connection established");
                     self.reset_after_starttls();
-                    return self.run_connection_loop(
-                        Connection::Tls(BufReader::new(Box::new(tls_stream))),
-                        session_start,
-                    )
-                    .await;
+                    return self
+                        .run_connection_loop(
+                            Connection::Tls(BufReader::new(Box::new(tls_stream))),
+                            session_start,
+                        )
+                        .await;
                 } else {
                     self.send_response(&mut connection, "454 TLS not available")
                         .await?;
@@ -189,7 +196,8 @@ impl SmtpSession {
     ) -> Result<()> {
         loop {
             if session_start.elapsed() >= self.max_session_duration {
-                self.send_response(&mut connection, "421 Session timeout").await?;
+                self.send_response(&mut connection, "421 Session timeout")
+                    .await?;
                 break;
             }
 
@@ -256,9 +264,7 @@ impl SmtpSession {
             ));
         }
 
-        Ok(Some(
-            line.trim_end_matches(['\r', '\n']).trim().to_string(),
-        ))
+        Ok(Some(line.trim_end_matches(['\r', '\n']).trim().to_string()))
     }
 
     async fn handle_data_processing(&mut self, connection: &mut Connection) -> Result<()> {
@@ -614,85 +620,109 @@ mod tests {
 
     fn create_test_session() -> SmtpSession {
         let client = Client::new();
-        let mailpace_client =
-            MailPaceClient::new(
-                client,
-                "https://api.mailpace.com/v1/send".to_string(),
-                2,
-                Duration::from_millis(250),
-            );
-        let (max_command_length, max_message_size, max_recipients, read_timeout, write_timeout, max_session_duration) =
-            default_limits_args();
-        SmtpSession::new(
-            mailpace_client,
-            Some("test-token".to_string()),
-            None,
-            false,
-            1024 * 1024, // 1MB
-            5,
-            false, // HTML compression disabled for most tests
+        let mailpace_client = MailPaceClient::new(
+            client,
+            "https://api.mailpace.com/v1/send".to_string(),
+            2,
+            Duration::from_millis(250),
+        );
+        let (
             max_command_length,
             max_message_size,
             max_recipients,
             read_timeout,
             write_timeout,
             max_session_duration,
+        ) = default_limits_args();
+        let config = SmtpSessionConfig {
+            enable_attachments: false,
+            max_attachment_size: 1024 * 1024,
+            max_attachments: 5,
+            enable_html_compression: false,
+            max_command_length,
+            max_message_size,
+            max_recipients,
+            read_timeout,
+            write_timeout,
+            max_session_duration,
+        };
+        SmtpSession::new(
+            mailpace_client,
+            Some("test-token".to_string()),
+            None,
+            config,
         )
     }
 
     fn create_test_session_with_attachments() -> SmtpSession {
         let client = Client::new();
-        let mailpace_client =
-            MailPaceClient::new(
-                client,
-                "https://api.mailpace.com/v1/send".to_string(),
-                2,
-                Duration::from_millis(250),
-            );
-        let (max_command_length, max_message_size, max_recipients, read_timeout, write_timeout, max_session_duration) =
-            default_limits_args();
-        SmtpSession::new(
-            mailpace_client,
-            Some("test-token".to_string()),
-            None,
-            true,
-            1024 * 1024, // 1MB
-            5,
-            false, // HTML compression disabled for most tests
+        let mailpace_client = MailPaceClient::new(
+            client,
+            "https://api.mailpace.com/v1/send".to_string(),
+            2,
+            Duration::from_millis(250),
+        );
+        let (
             max_command_length,
             max_message_size,
             max_recipients,
             read_timeout,
             write_timeout,
             max_session_duration,
+        ) = default_limits_args();
+        let config = SmtpSessionConfig {
+            enable_attachments: true,
+            max_attachment_size: 1024 * 1024,
+            max_attachments: 5,
+            enable_html_compression: false,
+            max_command_length,
+            max_message_size,
+            max_recipients,
+            read_timeout,
+            write_timeout,
+            max_session_duration,
+        };
+        SmtpSession::new(
+            mailpace_client,
+            Some("test-token".to_string()),
+            None,
+            config,
         )
     }
 
     fn create_test_session_with_html_compression() -> SmtpSession {
         let client = Client::new();
-        let mailpace_client =
-            MailPaceClient::new(
-                client,
-                "https://api.mailpace.com/v1/send".to_string(),
-                2,
-                Duration::from_millis(250),
-            );
-        let (max_command_length, max_message_size, max_recipients, read_timeout, write_timeout, max_session_duration) =
-            default_limits_args();
-        SmtpSession::new(
-            mailpace_client,
-            Some("test-token".to_string()),
-            None,
-            false,
-            1024 * 1024, // 1MB
-            5,
-            true, // HTML compression enabled
+        let mailpace_client = MailPaceClient::new(
+            client,
+            "https://api.mailpace.com/v1/send".to_string(),
+            2,
+            Duration::from_millis(250),
+        );
+        let (
             max_command_length,
             max_message_size,
             max_recipients,
             read_timeout,
             write_timeout,
             max_session_duration,
+        ) = default_limits_args();
+        let config = SmtpSessionConfig {
+            enable_attachments: false,
+            max_attachment_size: 1024 * 1024,
+            max_attachments: 5,
+            enable_html_compression: true,
+            max_command_length,
+            max_message_size,
+            max_recipients,
+            read_timeout,
+            write_timeout,
+            max_session_duration,
+        };
+        SmtpSession::new(
+            mailpace_client,
+            Some("test-token".to_string()),
+            None,
+            config,
         )
     }
 
@@ -949,27 +979,28 @@ mod tests {
     #[tokio::test]
     async fn test_process_command_rcpt_limit() {
         let client = Client::new();
-        let mailpace_client =
-            MailPaceClient::new(
-                client,
-                "https://api.mailpace.com/v1/send".to_string(),
-                2,
-                Duration::from_millis(250),
-            );
+        let mailpace_client = MailPaceClient::new(
+            client,
+            "https://api.mailpace.com/v1/send".to_string(),
+            2,
+            Duration::from_millis(250),
+        );
         let mut session = SmtpSession::new(
             mailpace_client,
             Some("test-token".to_string()),
             None,
-            false,
-            1024 * 1024,
-            5,
-            false,
-            2048,
-            10 * 1024 * 1024,
-            1,
-            Duration::from_secs(30),
-            Duration::from_secs(30),
-            Duration::from_secs(300),
+            SmtpSessionConfig {
+                enable_attachments: false,
+                max_attachment_size: 1024 * 1024,
+                max_attachments: 5,
+                enable_html_compression: false,
+                max_command_length: 2048,
+                max_message_size: 10 * 1024 * 1024,
+                max_recipients: 1,
+                read_timeout: Duration::from_secs(30),
+                write_timeout: Duration::from_secs(30),
+                max_session_duration: Duration::from_secs(300),
+            },
         );
 
         let first = session
@@ -1144,6 +1175,56 @@ mod tests {
 
         let data_str = String::from_utf8(session.data.clone()).unwrap();
         assert!(data_str.contains(".This line starts with two dots"));
+    }
+
+    #[tokio::test]
+    async fn test_read_data_message_size_limit() {
+        let client = Client::new();
+        let mailpace_client = MailPaceClient::new(
+            client,
+            "https://api.mailpace.com/v1/send".to_string(),
+            2,
+            Duration::from_millis(250),
+        );
+        let mut session = SmtpSession::new(
+            mailpace_client,
+            Some("test-token".to_string()),
+            None,
+            SmtpSessionConfig {
+                enable_attachments: false,
+                max_attachment_size: 1024 * 1024,
+                max_attachments: 5,
+                enable_html_compression: false,
+                max_command_length: 2048,
+                max_message_size: 10,
+                max_recipients: 100,
+                read_timeout: Duration::from_secs(30),
+                write_timeout: Duration::from_secs(30),
+                max_session_duration: Duration::from_secs(300),
+            },
+        );
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let payload = "Subject: Test\r\n\r\nThis body is too large\r\n.\r\n".to_string();
+
+        let writer = tokio::spawn(async move {
+            let mut stream = TcpStream::connect(addr).await.unwrap();
+            tokio::io::AsyncWriteExt::write_all(&mut stream, payload.as_bytes())
+                .await
+                .unwrap();
+        });
+
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut connection = Connection::Plain(BufReader::new(stream));
+        let result = session.read_data(&mut connection).await;
+        writer.await.unwrap();
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("SMTP message too large"));
     }
 
     #[test]
