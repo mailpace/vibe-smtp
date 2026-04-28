@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use tokio::time::{sleep, Duration};
 use tracing::{debug, info};
 
 #[derive(Serialize, Debug)]
@@ -51,46 +52,87 @@ pub struct MailPaceResponse {
 pub struct MailPaceClient {
     client: Client,
     endpoint: String,
+    retries: usize,
+    retry_backoff: Duration,
 }
 
 impl MailPaceClient {
-    pub fn new(client: Client, endpoint: String) -> Self {
-        Self { client, endpoint }
+    pub fn new(client: Client, endpoint: String, retries: usize, retry_backoff: Duration) -> Self {
+        Self {
+            client,
+            endpoint,
+            retries,
+            retry_backoff,
+        }
     }
 
     pub async fn send_email(&self, payload: &MailPacePayload, token: &str) -> Result<()> {
         debug!("Sending payload to MailPace: {:?}", payload);
 
-        let response = self
-            .client
-            .post(&self.endpoint)
-            .header("Accept", "application/json")
-            .header("Content-Type", "application/json")
-            .header("MailPace-Server-Token", token)
-            .json(payload)
-            .send()
-            .await
-            .context("Failed to send request to MailPace API")?;
+        let endpoint_url =
+            reqwest::Url::parse(&self.endpoint).context("Invalid MailPace API endpoint URL")?;
+        if endpoint_url.scheme() != "https" {
+            let host = endpoint_url.host_str().unwrap_or_default();
+            if host != "localhost" && host != "127.0.0.1" {
+                return Err(anyhow::anyhow!(
+                    "MailPace API endpoint must use HTTPS for non-local hosts"
+                ));
+            }
+        }
 
-        if response.status().is_success() {
-            let mailpace_response: MailPaceResponse = response
-                .json()
+        let mut attempt = 0usize;
+        loop {
+            match self
+                .client
+                .post(&self.endpoint)
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json")
+                .header("MailPace-Server-Token", token)
+                .json(payload)
+                .send()
                 .await
-                .context("Failed to parse MailPace response")?;
-            info!("Email sent successfully, ID: {:?}", mailpace_response.id);
-            Ok(())
-        } else {
-            let status = response.status();
-            let error_text = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
+            {
+                Ok(response) if response.status().is_success() => {
+                    let mailpace_response: MailPaceResponse = response
+                        .json()
+                        .await
+                        .context("Failed to parse MailPace response")?;
+                    info!("Email sent successfully, ID: {:?}", mailpace_response.id);
+                    return Ok(());
+                }
+                Ok(response) => {
+                    let status = response.status();
+                    let error_text = response
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
 
-            Err(anyhow::anyhow!(
-                "MailPace API error ({}): {}",
-                status,
-                error_text
-            ))
+                    if (status.is_server_error() || status.as_u16() == 429)
+                        && attempt < self.retries
+                    {
+                        let delay = self.retry_backoff.saturating_mul(2_u32.pow(attempt as u32));
+                        sleep(delay).await;
+                        attempt += 1;
+                        continue;
+                    }
+
+                    return Err(anyhow::anyhow!(
+                        "MailPace API error ({}): {}",
+                        status,
+                        error_text
+                    ));
+                }
+                Err(err) => {
+                    if attempt < self.retries && (err.is_timeout() || err.is_connect()) {
+                        let delay = self.retry_backoff.saturating_mul(2_u32.pow(attempt as u32));
+                        sleep(delay).await;
+                        attempt += 1;
+                        continue;
+                    }
+
+                    return Err(err).context("Failed to send request to MailPace API");
+                }
+            }
         }
     }
 }

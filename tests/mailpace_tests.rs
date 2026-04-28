@@ -22,7 +22,12 @@ async fn test_mailpace_client_success() {
         .await;
 
     let client = reqwest::Client::new();
-    let mailpace_client = MailPaceClient::new(client, format!("{}/api/v1/send", mock_server.uri()));
+    let mailpace_client = MailPaceClient::new(
+        client,
+        format!("{}/api/v1/send", mock_server.uri()),
+        2,
+        std::time::Duration::from_millis(250),
+    );
 
     let payload = MailPacePayload {
         from: "test@example.com".to_string(),
@@ -56,7 +61,12 @@ async fn test_mailpace_client_with_attachments() {
         .await;
 
     let client = reqwest::Client::new();
-    let mailpace_client = MailPaceClient::new(client, format!("{}/api/v1/send", mock_server.uri()));
+    let mailpace_client = MailPaceClient::new(
+        client,
+        format!("{}/api/v1/send", mock_server.uri()),
+        2,
+        std::time::Duration::from_millis(250),
+    );
 
     let payload = MailPacePayload {
         from: "test@example.com".to_string(),
@@ -94,7 +104,12 @@ async fn test_mailpace_client_error_response() {
         .await;
 
     let client = reqwest::Client::new();
-    let mailpace_client = MailPaceClient::new(client, format!("{}/api/v1/send", mock_server.uri()));
+    let mailpace_client = MailPaceClient::new(
+        client,
+        format!("{}/api/v1/send", mock_server.uri()),
+        2,
+        std::time::Duration::from_millis(250),
+    );
 
     let payload = MailPacePayload {
         from: "invalid-email".to_string(),
@@ -123,6 +138,8 @@ async fn test_mailpace_client_network_error() {
     let mailpace_client = MailPaceClient::new(
         client,
         "http://non-existent-domain.invalid/api/v1/send".to_string(),
+        2,
+        std::time::Duration::from_millis(250),
     );
 
     let payload = MailPacePayload {

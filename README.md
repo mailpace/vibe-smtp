@@ -194,6 +194,16 @@ The server supports the following configuration options:
 - `--max-attachment-size`: Maximum size per attachment in bytes (default: 10MB)
 - `--max-attachments`: Maximum number of attachments per email (default: 10)
 - `--enable-html-compression`: Enable HTML compression for email bodies
+- `--max-connections`: Maximum concurrent SMTP sessions (default: `1000`)
+- `--max-command-length`: Maximum SMTP command length in bytes (default: `2048`)
+- `--max-message-size`: Maximum SMTP message size in bytes (default: `26214400`)
+- `--max-recipients`: Maximum recipients per message (default: `100`)
+- `--read-timeout-secs`: Per-command socket read timeout in seconds (default: `30`)
+- `--write-timeout-secs`: Socket write timeout in seconds (default: `30`)
+- `--max-session-duration-secs`: Maximum SMTP session duration in seconds (default: `300`)
+- `--mailpace-timeout-secs`: MailPace API timeout in seconds (default: `15`)
+- `--mailpace-retries`: Retries for transient MailPace API failures (default: `2`)
+- `--mailpace-retry-backoff-ms`: Initial MailPace retry backoff in milliseconds (default: `250`)
 - `--debug` or `-d`: Enable debug logging
 
 ## 🔐 Authentication
@@ -245,7 +255,7 @@ Configure your email client or application with these settings:
 | **SMTP Server** | `localhost` | Or your server's IP address |
 | **SMTP Port** | `25`, `587`, `2525`, or `465` | See port details below |
 | **Encryption** | Varies by port | See TLS configuration below |
-| **Authentication** | PLAIN or LOGIN | Standard SMTP AUTH methods |
+| **Authentication** | PLAIN | `AUTH PLAIN` is supported |
 | **Username** | Your MailPace API token | Get from MailPace Dashboard |
 | **Password** | Your MailPace API token | Same as username |
 
