@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use base64::{engine::general_purpose, Engine as _};
-use rustls::{Certificate, PrivateKey, ServerConfig};
+use rustls::pki_types::PrivateKeyDer;
+use rustls::ServerConfig;
 use rustls_pemfile::{certs, pkcs8_private_keys};
 use std::sync::Arc;
 use tokio_rustls::TlsAcceptor;
@@ -37,10 +38,7 @@ pub fn load_tls_config() -> Result<Option<TlsAcceptor>> {
 
     // Parse certificates
     let mut cert_reader = std::io::Cursor::new(cert_pem.as_bytes());
-    let cert_chain = certs(&mut cert_reader)?
-        .into_iter()
-        .map(Certificate)
-        .collect::<Vec<_>>();
+    let cert_chain = certs(&mut cert_reader).collect::<std::io::Result<Vec<_>>>()?;
 
     if cert_chain.is_empty() {
         return Err(anyhow::anyhow!("No certificates found"));
@@ -48,17 +46,16 @@ pub fn load_tls_config() -> Result<Option<TlsAcceptor>> {
 
     // Parse private key
     let mut key_reader = std::io::Cursor::new(private_key_pem.as_bytes());
-    let private_keys = pkcs8_private_keys(&mut key_reader)?;
+    let private_keys = pkcs8_private_keys(&mut key_reader).collect::<std::io::Result<Vec<_>>>()?;
 
     if private_keys.is_empty() {
         return Err(anyhow::anyhow!("No private keys found"));
     }
 
-    let private_key = PrivateKey(private_keys[0].clone());
+    let private_key: PrivateKeyDer<'static> = private_keys[0].clone_key().into();
 
     // Create TLS config
     let tls_config = ServerConfig::builder()
-        .with_safe_defaults()
         .with_no_client_auth()
         .with_single_cert(cert_chain, private_key)
         .context("Failed to create TLS config")?;
@@ -70,6 +67,12 @@ pub fn load_tls_config() -> Result<Option<TlsAcceptor>> {
 mod tests {
     use super::*;
     use std::env;
+    use std::sync::{Mutex, OnceLock};
+
+    fn test_env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+    }
 
     // Helper function to generate test certificates
     fn generate_test_cert() -> (String, String) {
@@ -102,6 +105,7 @@ mod tests {
 
     #[test]
     fn test_load_tls_config_without_env_vars_returns_none() {
+        let _guard = test_env_lock();
         // Ensure no env vars are set
         clear_tls_env_vars();
 
@@ -112,6 +116,7 @@ mod tests {
 
     #[test]
     fn test_load_tls_config_with_valid_env_vars() {
+        let _guard = test_env_lock();
         // Generate test certificates
         let (private_key_pem, cert_pem) = generate_test_cert();
         let private_key_b64 = general_purpose::STANDARD.encode(&private_key_pem);
@@ -129,6 +134,7 @@ mod tests {
 
     #[test]
     fn test_load_tls_config_with_invalid_base64_private_key() {
+        let _guard = test_env_lock();
         let (_, cert_pem) = generate_test_cert();
         let cert_b64 = general_purpose::STANDARD.encode(&cert_pem);
 
@@ -145,6 +151,7 @@ mod tests {
 
     #[test]
     fn test_load_tls_config_with_invalid_base64_cert() {
+        let _guard = test_env_lock();
         let (private_key_pem, _) = generate_test_cert();
         let private_key_b64 = general_purpose::STANDARD.encode(&private_key_pem);
 
@@ -161,6 +168,7 @@ mod tests {
 
     #[test]
     fn test_load_tls_config_with_invalid_utf8_private_key() {
+        let _guard = test_env_lock();
         let (_, cert_pem) = generate_test_cert();
         let cert_b64 = general_purpose::STANDARD.encode(&cert_pem);
 
@@ -181,6 +189,7 @@ mod tests {
 
     #[test]
     fn test_load_tls_config_with_invalid_utf8_cert() {
+        let _guard = test_env_lock();
         let (private_key_pem, _) = generate_test_cert();
         let private_key_b64 = general_purpose::STANDARD.encode(&private_key_pem);
 
@@ -201,6 +210,7 @@ mod tests {
 
     #[test]
     fn test_load_tls_config_with_invalid_certificate_format() {
+        let _guard = test_env_lock();
         let (private_key_pem, _) = generate_test_cert();
         let private_key_b64 = general_purpose::STANDARD.encode(&private_key_pem);
 
@@ -222,6 +232,7 @@ INVALID_CERTIFICATE_DATA_HERE
 
     #[test]
     fn test_load_tls_config_with_empty_certificate() {
+        let _guard = test_env_lock();
         let (private_key_pem, _) = generate_test_cert();
         let private_key_b64 = general_purpose::STANDARD.encode(&private_key_pem);
         let empty_cert = "";
@@ -240,6 +251,7 @@ INVALID_CERTIFICATE_DATA_HERE
 
     #[test]
     fn test_load_tls_config_with_invalid_private_key_format() {
+        let _guard = test_env_lock();
         let (_, cert_pem) = generate_test_cert();
         let cert_b64 = general_purpose::STANDARD.encode(&cert_pem);
         let invalid_key = "This is not a valid private key";
@@ -256,6 +268,7 @@ INVALID_CERTIFICATE_DATA_HERE
 
     #[test]
     fn test_load_tls_config_with_empty_private_key() {
+        let _guard = test_env_lock();
         let (_, cert_pem) = generate_test_cert();
         let cert_b64 = general_purpose::STANDARD.encode(&cert_pem);
         let empty_key = "";
@@ -274,6 +287,7 @@ INVALID_CERTIFICATE_DATA_HERE
 
     #[test]
     fn test_load_tls_config_with_only_private_key_env_var() {
+        let _guard = test_env_lock();
         let (private_key_pem, _) = generate_test_cert();
         let private_key_b64 = general_purpose::STANDARD.encode(&private_key_pem);
 
@@ -291,6 +305,7 @@ INVALID_CERTIFICATE_DATA_HERE
 
     #[test]
     fn test_load_tls_config_with_only_cert_env_var() {
+        let _guard = test_env_lock();
         let (_, cert_pem) = generate_test_cert();
         let cert_b64 = general_purpose::STANDARD.encode(&cert_pem);
 
@@ -308,22 +323,24 @@ INVALID_CERTIFICATE_DATA_HERE
 
     #[test]
     fn test_generated_certificates_are_valid() {
+        let _guard = test_env_lock();
         // Test that the generated certificates are valid by themselves
         let (private_key_pem, cert_pem) = generate_test_cert();
 
         let mut cert_reader = std::io::Cursor::new(cert_pem.as_bytes());
-        let cert_result = certs(&mut cert_reader);
+        let cert_result = certs(&mut cert_reader).collect::<std::io::Result<Vec<_>>>();
         assert!(cert_result.is_ok());
         assert!(!cert_result.unwrap().is_empty());
 
         let mut key_reader = std::io::Cursor::new(private_key_pem.as_bytes());
-        let key_result = pkcs8_private_keys(&mut key_reader);
+        let key_result = pkcs8_private_keys(&mut key_reader).collect::<std::io::Result<Vec<_>>>();
         assert!(key_result.is_ok());
         assert!(!key_result.unwrap().is_empty());
     }
 
     #[test]
     fn test_tls_config_creation_with_mismatched_cert_key() {
+        let _guard = test_env_lock();
         // Generate one set of certs and create a different private key to test mismatch scenario
         let (_, cert_pem) = generate_test_cert();
         let (different_private_key, _) = generate_test_cert(); // Generate different cert/key pair
