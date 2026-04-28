@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use base64::{engine::general_purpose, Engine as _};
-use rustls::{Certificate, PrivateKey, ServerConfig};
+use rustls::pki_types::PrivateKeyDer;
+use rustls::ServerConfig;
 use rustls_pemfile::{certs, pkcs8_private_keys};
 use std::sync::Arc;
 use tokio_rustls::TlsAcceptor;
@@ -37,10 +38,7 @@ pub fn load_tls_config() -> Result<Option<TlsAcceptor>> {
 
     // Parse certificates
     let mut cert_reader = std::io::Cursor::new(cert_pem.as_bytes());
-    let cert_chain = certs(&mut cert_reader)?
-        .into_iter()
-        .map(Certificate)
-        .collect::<Vec<_>>();
+    let cert_chain = certs(&mut cert_reader).collect::<std::io::Result<Vec<_>>>()?;
 
     if cert_chain.is_empty() {
         return Err(anyhow::anyhow!("No certificates found"));
@@ -48,17 +46,16 @@ pub fn load_tls_config() -> Result<Option<TlsAcceptor>> {
 
     // Parse private key
     let mut key_reader = std::io::Cursor::new(private_key_pem.as_bytes());
-    let private_keys = pkcs8_private_keys(&mut key_reader)?;
+    let private_keys = pkcs8_private_keys(&mut key_reader).collect::<std::io::Result<Vec<_>>>()?;
 
     if private_keys.is_empty() {
         return Err(anyhow::anyhow!("No private keys found"));
     }
 
-    let private_key = PrivateKey(private_keys[0].clone());
+    let private_key: PrivateKeyDer<'static> = private_keys[0].clone_key().into();
 
     // Create TLS config
     let tls_config = ServerConfig::builder()
-        .with_safe_defaults()
         .with_no_client_auth()
         .with_single_cert(cert_chain, private_key)
         .context("Failed to create TLS config")?;
@@ -312,12 +309,12 @@ INVALID_CERTIFICATE_DATA_HERE
         let (private_key_pem, cert_pem) = generate_test_cert();
 
         let mut cert_reader = std::io::Cursor::new(cert_pem.as_bytes());
-        let cert_result = certs(&mut cert_reader);
+        let cert_result = certs(&mut cert_reader).collect::<std::io::Result<Vec<_>>>();
         assert!(cert_result.is_ok());
         assert!(!cert_result.unwrap().is_empty());
 
         let mut key_reader = std::io::Cursor::new(private_key_pem.as_bytes());
-        let key_result = pkcs8_private_keys(&mut key_reader);
+        let key_result = pkcs8_private_keys(&mut key_reader).collect::<std::io::Result<Vec<_>>>();
         assert!(key_result.is_ok());
         assert!(!key_result.unwrap().is_empty());
     }
